@@ -5,6 +5,7 @@ import type { CaseTimelineStep, ConsultationCase } from "@/lib/api";
 type Props = {
   caseDetail: ConsultationCase;
   onBackToVendors: () => void;
+  onRefresh: () => void;
 };
 
 const STATUS_TONES: Record<string, string> = {
@@ -12,15 +13,20 @@ const STATUS_TONES: Record<string, string> = {
   vendor_accepted: "bg-sky-100 text-sky-900 ring-sky-300",
   awaiting_user_confirmation: "bg-violet-100 text-violet-900 ring-violet-300",
   confirmed: "bg-emerald-100 text-emerald-900 ring-emerald-300",
-  vendor_declined: "bg-rose-100 text-rose-900 ring-rose-300",
+  vendor_rejected: "bg-rose-100 text-rose-900 ring-rose-300",
   completed: "bg-emerald-100 text-emerald-900 ring-emerald-300",
   cancelled: "bg-slate-200 text-slate-700 ring-slate-300",
 };
 
-export default function CaseTrackingBoard({ caseDetail, onBackToVendors }: Props) {
+export default function CaseTrackingBoard({
+  caseDetail,
+  onBackToVendors,
+  onRefresh,
+}: Props) {
   const tone =
     STATUS_TONES[caseDetail.status] ?? "bg-slate-100 text-slate-800 ring-slate-300";
   const shared = caseDetail.shared_with_vendor;
+  const waiting = caseDetail.status === "waiting_vendor_response";
 
   return (
     <div className="space-y-5">
@@ -33,12 +39,44 @@ export default function CaseTrackingBoard({ caseDetail, onBackToVendors }: Props
             {caseDetail.case_number}
           </p>
         </div>
-        <span
-          className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ${tone}`}
-        >
-          {caseDetail.status_label}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span
+            aria-live="polite"
+            className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ${tone}`}
+          >
+            {caseDetail.status_label}
+          </span>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="text-xs text-slate-500 underline-offset-2 transition hover:text-slate-800 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+          >
+            手動更新
+          </button>
+          {waiting ? (
+            <p className="text-xs text-slate-400">每 4 秒自動檢查廠商回覆</p>
+          ) : null}
+        </div>
       </div>
+
+      {caseDetail.vendor_note || caseDetail.proposed_time ? (
+        <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+          <h3 className="text-sm font-semibold text-emerald-900">廠商回覆</h3>
+          {caseDetail.proposed_time ? (
+            <p className="mt-1 text-sm text-slate-800">
+              預計到場：
+              <span className="font-bold">
+                {new Date(caseDetail.proposed_time).toLocaleString("zh-TW")}
+              </span>
+            </p>
+          ) : null}
+          {caseDetail.vendor_note ? (
+            <p className="mt-1 text-sm leading-relaxed text-slate-700">
+              備註：{caseDetail.vendor_note}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h3 className="text-sm font-semibold text-slate-900">選定廠商</h3>

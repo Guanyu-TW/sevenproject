@@ -1,5 +1,7 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -52,6 +54,15 @@ class ConsultationCase(TimestampMixin, Base):
     )
     next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     blocked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: Filled in when the vendor responds.
+    vendor_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposed_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     #: False until the resident confirms; gates the vendor's access to the
     #: resident's name, phone and full address.
     contact_shared: Mapped[bool] = mapped_column(

@@ -31,7 +31,14 @@ ALLOWED_TASK_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.READY_FOR_MATCHING: frozenset(
         {TaskStatus.MATCHING, TaskStatus.NEEDS_INFO, TaskStatus.CANCELLED}
     ),
-    TaskStatus.MATCHING: frozenset({TaskStatus.COMPLETED, TaskStatus.CANCELLED}),
+    # A vendor rejection sends the task back so the resident can pick again.
+    TaskStatus.MATCHING: frozenset(
+        {
+            TaskStatus.READY_FOR_MATCHING,
+            TaskStatus.COMPLETED,
+            TaskStatus.CANCELLED,
+        }
+    ),
     TaskStatus.COMPLETED: frozenset(),
     TaskStatus.CANCELLED: frozenset(),
 }
@@ -48,13 +55,13 @@ class CaseStatus(StrEnum):
     VENDOR_ACCEPTED = "vendor_accepted"
     AWAITING_USER_CONFIRMATION = "awaiting_user_confirmation"
     CONFIRMED = "confirmed"
-    VENDOR_DECLINED = "vendor_declined"
+    VENDOR_REJECTED = "vendor_rejected"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
 
 #: A task may only hold one case in any of these states at a time. Anything
-#: else (declined / cancelled) frees the task up to pick another vendor.
+#: else (rejected / cancelled) frees the task up to pick another vendor.
 ACTIVE_CASE_STATUSES: frozenset[CaseStatus] = frozenset(
     {
         CaseStatus.WAITING_VENDOR_RESPONSE,
@@ -64,3 +71,33 @@ ACTIVE_CASE_STATUSES: frozenset[CaseStatus] = frozenset(
         CaseStatus.COMPLETED,
     }
 )
+
+#: Cases the vendor still has to act on.
+VENDOR_ACTIONABLE_STATUSES: frozenset[CaseStatus] = frozenset(
+    {CaseStatus.WAITING_VENDOR_RESPONSE}
+)
+
+#: Which case transitions the API will accept.
+ALLOWED_CASE_TRANSITIONS: dict[CaseStatus, frozenset[CaseStatus]] = {
+    CaseStatus.WAITING_VENDOR_RESPONSE: frozenset(
+        {
+            CaseStatus.VENDOR_ACCEPTED,
+            CaseStatus.VENDOR_REJECTED,
+            CaseStatus.CANCELLED,
+        }
+    ),
+    CaseStatus.VENDOR_ACCEPTED: frozenset(
+        {
+            CaseStatus.AWAITING_USER_CONFIRMATION,
+            CaseStatus.CONFIRMED,
+            CaseStatus.CANCELLED,
+        }
+    ),
+    CaseStatus.AWAITING_USER_CONFIRMATION: frozenset(
+        {CaseStatus.CONFIRMED, CaseStatus.CANCELLED}
+    ),
+    CaseStatus.CONFIRMED: frozenset({CaseStatus.COMPLETED, CaseStatus.CANCELLED}),
+    CaseStatus.VENDOR_REJECTED: frozenset(),
+    CaseStatus.COMPLETED: frozenset(),
+    CaseStatus.CANCELLED: frozenset(),
+}

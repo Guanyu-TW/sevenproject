@@ -245,6 +245,9 @@ export type ConsultationCase = {
   blocked_reason?: string | null;
   estimated_price?: number | null;
   recommendation_reason?: string | null;
+  vendor_note?: string | null;
+  proposed_time?: string | null;
+  responded_at?: string | null;
   contact_shared: boolean;
   privacy_notice: string;
   vendor: VendorDetail;
@@ -323,4 +326,103 @@ export async function getCase(
     throw new ApiError(await readErrorMessage(res), res.status);
   }
   return (await res.json()) as ConsultationCase;
+}
+
+export type VendorSummary = {
+  id: number;
+  name: string;
+  rating: number;
+  service_city?: string | null;
+  open_case_count: number;
+};
+
+export type VendorCaseListItem = {
+  case_id: number;
+  case_number: string;
+  vendor_id: number;
+  vendor_name: string;
+  status: string;
+  status_label: string;
+  estimated_price?: number | null;
+  recommendation_reason?: string | null;
+  vendor_note?: string | null;
+  proposed_time?: string | null;
+  responded_at?: string | null;
+  contact_shared: boolean;
+  demand: SharedWithVendor;
+  created_at: string;
+};
+
+export type VendorCaseListResponse = {
+  vendor: VendorSummary | null;
+  total: number;
+  pending: number;
+  responded_total: number;
+  /** How many of `pending` are actually in `cases`. */
+  pending_shown: number;
+  responded_shown: number;
+  truncated: boolean;
+  cases: VendorCaseListItem[];
+};
+
+export type VendorRespondResponse = {
+  case_id: number;
+  case_number: string;
+  status: string;
+  status_label: string;
+  task_id: number;
+  task_status: string;
+  task_next_action?: string | null;
+  vendor_note?: string | null;
+  proposed_time?: string | null;
+  history: Array<Record<string, unknown>>;
+};
+
+export async function listVendors(signal?: AbortSignal): Promise<VendorSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/api/vendor/list`, {
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as VendorSummary[];
+}
+
+export async function listVendorCases(
+  vendorId: number | null,
+  signal?: AbortSignal,
+): Promise<VendorCaseListResponse> {
+  const query = new URLSearchParams({ limit: "20" });
+  if (vendorId !== null) query.set("vendor_id", String(vendorId));
+
+  const res = await fetch(`${API_BASE_URL}/api/vendor/cases?${query}`, {
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as VendorCaseListResponse;
+}
+
+export async function respondToCase(
+  caseId: number,
+  body: {
+    action: "accept" | "reject";
+    vendorNote?: string | null;
+    proposedTime?: string | null;
+  },
+  vendorId?: number | null,
+  signal?: AbortSignal,
+): Promise<VendorRespondResponse> {
+  const query = vendorId != null ? `?vendor_id=${vendorId}` : "";
+  const res = await fetch(
+    `${API_BASE_URL}/api/vendor/cases/${caseId}/respond${query}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal,
+    },
+  );
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as VendorRespondResponse;
 }

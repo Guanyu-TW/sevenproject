@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from urllib.parse import quote_plus
+from zoneinfo import ZoneInfo
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,6 +18,10 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Life Guardian"
     ENVIRONMENT: str = "development"
     API_PREFIX: str = "/api"
+
+    # Timestamps come back from PostgreSQL in UTC, so any string the server
+    # formats for a resident must be converted to this zone first.
+    TIMEZONE: str = "Asia/Taipei"
 
     # Full SQLAlchemy URL. When set (docker-compose does), it wins over the
     # POSTGRES_* parts below, which are the local/bare-metal fallback.
@@ -74,6 +79,11 @@ class Settings(BaseSettings):
             f"{quote_plus(self.POSTGRES_USER)}:{quote_plus(self.POSTGRES_PASSWORD)}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+    @property
+    def tzinfo(self) -> ZoneInfo:
+        """Display timezone for server-rendered date strings."""
+        return ZoneInfo(self.TIMEZONE)
 
     @property
     def has_static_aws_credentials(self) -> bool:

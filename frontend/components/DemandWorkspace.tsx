@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ChatPanel from "@/components/ChatPanel";
 import TaskResultPanel from "@/components/TaskResultPanel";
 import {
@@ -236,6 +236,50 @@ export default function DemandWorkspace() {
     [task, say],
   );
 
+  /**
+   * Poll while the case is waiting on the vendor, so accepting in the vendor
+   * portal shows up here without a manual refresh. Stops as soon as the case
+   * reaches a state that only the resident can move.
+   */
+  useEffect(() => {
+    if (!caseDetail) return;
+    if (caseDetail.status !== "waiting_vendor_response") return;
+
+    const controller = new AbortController();
+    const timer = setInterval(async () => {
+      try {
+        const fresh = await getCase(caseDetail.id, controller.signal);
+        if (fresh.status !== caseDetail.status) {
+          setCaseDetail(fresh);
+          say(
+            "assistant",
+            fresh.status === "vendor_accepted"
+              ? `好消息，${fresh.vendor.name} 已經接單了！` +
+                  `${fresh.next_action ?? ""}`
+              : `${fresh.vendor.name} 婉拒了這次委託。` +
+                  `${fresh.next_action ?? ""}`,
+          );
+        }
+      } catch {
+        // Transient failure; the next tick retries.
+      }
+    }, 4000);
+
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [caseDetail, say]);
+
+  const refreshCase = useCallback(async () => {
+    if (!caseDetail) return;
+    try {
+      setCaseDetail(await getCase(caseDetail.id));
+    } catch (err) {
+      setError(describeError(err, "更新案件失敗"));
+    }
+  }, [caseDetail]);
+
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-2">
       <ChatPanel
@@ -255,6 +299,7 @@ export default function DemandWorkspace() {
         onBackToTask={() => setMatchResult(null)}
         onSelectVendor={(vendor) => void selectVendor(vendor)}
         onBackToVendors={() => setCaseDetail(null)}
+        onRefreshCase={() => void refreshCase()}
       />
     </div>
   );

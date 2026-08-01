@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.models import (
     ACTIVE_CASE_STATUSES,
     CaseStatus,
@@ -44,10 +45,10 @@ PRIVACY_NOTICE = (
 
 STATUS_LABELS: dict[CaseStatus, str] = {
     CaseStatus.WAITING_VENDOR_RESPONSE: "等待廠商回覆",
-    CaseStatus.VENDOR_ACCEPTED: "廠商已接受",
+    CaseStatus.VENDOR_ACCEPTED: "廠商已接單",
     CaseStatus.AWAITING_USER_CONFIRMATION: "等待你確認",
     CaseStatus.CONFIRMED: "已確認，等待到場",
-    CaseStatus.VENDOR_DECLINED: "廠商婉拒",
+    CaseStatus.VENDOR_REJECTED: "廠商婉拒",
     CaseStatus.COMPLETED: "已完成",
     CaseStatus.CANCELLED: "已取消",
 }
@@ -59,7 +60,7 @@ STATUS_GUIDANCE: dict[CaseStatus, tuple[str, str | None]] = {
         None,
     ),
     CaseStatus.VENDOR_ACCEPTED: (
-        "廠商已接受委託，請確認報價與到場時間。",
+        "廠商已確認接案！預計於指定時間到場服務，請確保聯絡電話暢通。",
         None,
     ),
     CaseStatus.AWAITING_USER_CONFIRMATION: (
@@ -67,7 +68,7 @@ STATUS_GUIDANCE: dict[CaseStatus, tuple[str, str | None]] = {
         None,
     ),
     CaseStatus.CONFIRMED: ("已確認，等待廠商到場服務。", None),
-    CaseStatus.VENDOR_DECLINED: (
+    CaseStatus.VENDOR_REJECTED: (
         "建議回到推薦清單改選其他廠商。",
         "廠商婉拒了這次委託。",
     ),
@@ -209,10 +210,15 @@ def create_case(
             last_error = exc
             # Either the number collided or (task, vendor) already exists.
             if "uq_consultation_task_vendor" in str(exc.orig):
-                raise DuplicateCaseError(
-                    f"任務 #{task.id} 已經對廠商「{vendor.name}」建立過案件。",
-                    existing=_require_existing(db, task.id, vendor.id),
-                ) from exc
+                previous_case = _require_existing(db, task.id, vendor.id)
+                if previous_case.status == CaseStatus.VENDOR_REJECTED:
+                    message = (
+                        f"廠商「{vendor.name}」先前已婉拒這個需求"
+                        f"（{previous_case.case_number}），請改選其他廠商。"
+                    )
+                else:
+                    message = f"任務 #{task.id} 已經對廠商「{vendor.name}」建立過案件。"
+                raise DuplicateCaseError(message, existing=previous_case) from exc
             logger.warning(
                 "case_number %s collided, retrying (attempt %d)", case_number, attempt + 1
             )
@@ -223,9 +229,11 @@ def create_case(
             "產生案件編號時持續衝突，請重試。", code="case_number_exhausted"
         ) from last_error
 
-    db.add(
+    # Appended through the relationship for the same reason as in
+    # vendor_service.respond_to_case: keep the in-memory graph consistent with
+    # the database when expire_on_commit is off.
+    case.history.append(
         CaseStatusHistory(
-            case_id=case.id,
             from_status=previous_task_status,
             to_status=CaseStatus.WAITING_VENDOR_RESPONSE.value,
             actor="consumer",
@@ -298,6 +306,23 @@ def _build_shared_view(case: ConsultationCase) -> SharedWithVendor:
     )
 
 
+def _vendor_response_note(case: ConsultationCase) -> str | None:
+    """Surface the vendor's own words on the resident's timeline."""
+    if case.status == CaseStatus.VENDOR_REJECTED:
+        return case.vendor_note or "廠商婉拒了這次委託。"
+    if case.vendor_note or case.proposed_time:
+        bits = []
+        if case.proposed_time:
+            # PostgreSQL hands timestamptz back in UTC; showing that verbatim
+            # would tell the resident to expect the vendor 8 hours early.
+            local = case.proposed_time.astimezone(settings.tzinfo)
+            bits.append("預計到場：" + local.strftime("%Y/%m/%d %H:%M"))
+        if case.vendor_note:
+            bits.append(f"廠商備註：{case.vendor_note}")
+        return "　".join(bits)
+    return None
+
+
 def _build_timeline(case: ConsultationCase) -> list[CaseTimelineStep]:
     """Project the whole journey, not just what already happened."""
     created = next(
@@ -309,7 +334,7 @@ def _build_timeline(case: ConsultationCase) -> list[CaseTimelineStep]:
             h
             for h in case.history
             if h.to_status
-            in (CaseStatus.VENDOR_ACCEPTED.value, CaseStatus.VENDOR_DECLINED.value)
+            in (CaseStatus.VENDOR_ACCEPTED.value, CaseStatus.VENDOR_REJECTED.value)
         ),
         None,
     )
@@ -351,11 +376,12 @@ def _build_timeline(case: ConsultationCase) -> list[CaseTimelineStep]:
                 status
                 in (
                     CaseStatus.VENDOR_ACCEPTED,
-                    CaseStatus.VENDOR_DECLINED,
+                    CaseStatus.VENDOR_REJECTED,
                     CaseStatus.AWAITING_USER_CONFIRMATION,
                 ),
             ),
             at=responded.created_at if responded else None,
+            note=_vendor_response_note(case),
         ),
         CaseTimelineStep(
             key="confirmed",
@@ -389,6 +415,9 @@ def to_case_read(case: ConsultationCase) -> CaseRead:
     return CaseRead(
         id=case.id,
         case_number=case.case_number,
+        vendor_note=case.vendor_note,
+        proposed_time=case.proposed_time,
+        responded_at=case.responded_at,
         status=case.status,
         status_label=STATUS_LABELS.get(case.status, str(case.status)),
         task_id=case.task_id,

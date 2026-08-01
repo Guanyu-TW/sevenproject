@@ -23,6 +23,7 @@ type Props = {
   onBackToTask: () => void;
   onSelectVendor: (vendor: VendorRecommendation) => void;
   onBackToVendors: () => void;
+  onRefreshCase: () => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -48,6 +49,7 @@ export default function TaskResultPanel({
   onBackToTask,
   onSelectVendor,
   onBackToVendors,
+  onRefreshCase,
 }: Props) {
   const view: View =
     caseDetail !== null ? "case" : matchResult !== null ? "vendors" : "task";
@@ -83,6 +85,7 @@ export default function TaskResultPanel({
           <CaseTrackingBoard
             caseDetail={caseDetail}
             onBackToVendors={onBackToVendors}
+            onRefresh={onRefreshCase}
           />
         ) : null}
 

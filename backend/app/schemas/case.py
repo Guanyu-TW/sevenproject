@@ -78,6 +78,9 @@ class CaseRead(BaseModel):
     blocked_reason: str | None = None
     estimated_price: int | None = None
     recommendation_reason: str | None = None
+    vendor_note: str | None = None
+    proposed_time: datetime | None = None
+    responded_at: datetime | None = None
     contact_shared: bool = False
     privacy_notice: str
     vendor: VendorRead
