@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { href: "/", label: "消費者端" },
+  { href: "/dashboard", label: "我的儀表板" },
   { href: "/vendor", label: "廠商端" },
 ] as const;
 

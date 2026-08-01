@@ -436,6 +436,80 @@ export async function respondToCase(
   return (await res.json()) as VendorRespondResponse;
 }
 
+export type BadgeTone = "draft" | "pending" | "active" | "done" | "failed";
+
+export type DashboardStats = {
+  total_tasks: number;
+  needs_input: number;
+  ready_for_matching: number;
+  waiting_vendor: number;
+  in_progress: number;
+  completed: number;
+  rejected: number;
+  cancelled: number;
+};
+
+export type DashboardCaseRef = {
+  case_id: number;
+  case_number: string;
+  status: string;
+  status_label: string;
+  vendor_id: number;
+  vendor_name: string;
+  vendor_rating?: number | null;
+  estimated_price?: number | null;
+  proposed_time?: string | null;
+  vendor_note?: string | null;
+  responded_at?: string | null;
+};
+
+export type DashboardTaskItem = {
+  task_id: number;
+  title?: string | null;
+  summary?: string | null;
+  raw_input?: string | null;
+  status: string;
+  status_label: string;
+  /** Badge text; prefers the case status once a vendor is involved. */
+  display_label: string;
+  badge_tone: BadgeTone;
+  category_code?: string | null;
+  category_name?: string | null;
+  tags: string[];
+  budget_amount?: number | null;
+  currency?: string | null;
+  city?: string | null;
+  district?: string | null;
+  urgency?: string | null;
+  next_action?: string | null;
+  missing_count: number;
+  case_count: number;
+  latest_case?: DashboardCaseRef | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DashboardResponse = {
+  user: { id: number; name: string };
+  stats: DashboardStats;
+  total: number;
+  returned: number;
+  truncated: boolean;
+  tasks: DashboardTaskItem[];
+};
+
+export async function fetchDashboard(
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<DashboardResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/dashboard/tasks?limit=${limit}`,
+    { cache: "no-store", signal },
+  );
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as DashboardResponse;
+}
+
 /** Resident accepts the quote, unlocking their contact details to the vendor. */
 export async function confirmCase(
   caseId: number,

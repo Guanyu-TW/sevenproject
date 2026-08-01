@@ -1,3 +1,3 @@
-from app.api.routes import ai, cases, health, matching, tasks, vendor
+from app.api.routes import ai, cases, dashboard, health, matching, tasks, vendor
 
-__all__ = ["ai", "cases", "health", "matching", "tasks", "vendor"]
+__all__ = ["ai", "cases", "dashboard", "health", "matching", "tasks", "vendor"]
