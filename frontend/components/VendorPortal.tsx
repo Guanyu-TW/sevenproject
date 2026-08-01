@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
+  completeCase,
   listVendorCases,
   listVendors,
   respondToCase,
@@ -69,9 +70,33 @@ export default function VendorPortal() {
     [data],
   );
   const respondedCases = useMemo(
-    () => (data?.cases ?? []).filter((c) => c.status !== "waiting_vendor_response"),
+    () =>
+      (data?.cases ?? []).filter(
+        (c) => c.status === "vendor_accepted" || c.status === "contact_shared",
+      ),
     [data],
   );
+  const completedCases = useMemo(
+    () => (data?.cases ?? []).filter((c) => c.status === "completed"),
+    [data],
+  );
+
+  async function handleComplete(caseItem: VendorCaseListItem) {
+    setActiveCase(caseItem.case_id);
+    setError(null);
+    try {
+      await completeCase(caseItem.case_id, "vendor");
+      await refresh();
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? `標記完成失敗（${err.status}）：${err.message}`
+          : "無法連線至後端 API",
+      );
+    } finally {
+      setActiveCase(null);
+    }
+  }
 
   async function handleRespond(
     caseItem: VendorCaseListItem,
@@ -204,15 +229,48 @@ export default function VendorPortal() {
               id="responded-heading"
               className="mb-3 text-sm font-semibold text-slate-900"
             >
-              已接單案件
+              進行中案件
               {data && data.responded_total > respondedCases.length
                 ? `（顯示 ${respondedCases.length} / 共 ${data.responded_total}）`
                 : `（${respondedCases.length}）`}
             </h2>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {respondedCases.map((c) => (
                 <li key={c.case_id}>
-                  <RespondedCaseCard caseItem={c} showVendorName={vendorId === null} />
+                  <ActiveCaseCard
+                    caseItem={c}
+                    showVendorName={vendorId === null}
+                    busy={activeCase === c.case_id}
+                    disabled={activeCase !== null}
+                    onComplete={handleComplete}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {completedCases.length > 0 ? (
+          <section aria-labelledby="completed-heading">
+            <h2
+              id="completed-heading"
+              className="mb-3 text-sm font-semibold text-slate-900"
+            >
+              已完成案件
+              {data && data.completed_total > completedCases.length
+                ? `（顯示 ${completedCases.length} / 共 ${data.completed_total}）`
+                : `（${completedCases.length}）`}
+            </h2>
+            <ul className="space-y-2">
+              {completedCases.map((c) => (
+                <li key={c.case_id}>
+                  <ActiveCaseCard
+                    caseItem={c}
+                    showVendorName={vendorId === null}
+                    busy={false}
+                    disabled
+                    onComplete={handleComplete}
+                  />
                 </li>
               ))}
             </ul>
@@ -386,32 +444,60 @@ function PendingCaseCard({
   );
 }
 
-function RespondedCaseCard({
+function ActiveCaseCard({
   caseItem,
   showVendorName,
+  busy,
+  disabled,
+  onComplete,
 }: {
   caseItem: VendorCaseListItem;
   showVendorName: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onComplete: (caseItem: VendorCaseListItem) => void;
 }) {
+  const d = caseItem.demand;
+  const unlocked = d.contact_unlocked;
+  const done = caseItem.status === "completed";
+  const canComplete = caseItem.status === "contact_shared";
+
   return (
-    <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+    <article
+      className={`rounded-xl border p-4 ${
+        done
+          ? "border-slate-200 bg-slate-50"
+          : unlocked
+            ? "border-sky-300 bg-sky-50"
+            : "border-violet-300 bg-violet-50"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-xs text-emerald-800">{caseItem.case_number}</p>
+          <p className="font-mono text-xs text-slate-500">{caseItem.case_number}</p>
           <h3 className="mt-0.5 text-sm font-semibold text-slate-900">
-            {caseItem.demand.title ?? "（無標題）"}
+            {d.title ?? "（無標題）"}
           </h3>
         </div>
         <div className="text-right">
-          <span className="rounded-full bg-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-900">
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              done
+                ? "bg-slate-200 text-slate-700"
+                : unlocked
+                  ? "bg-sky-200 text-sky-900"
+                  : "bg-violet-200 text-violet-900"
+            }`}
+          >
             {caseItem.status_label}
           </span>
           {showVendorName ? (
-            <p className="mt-1 text-xs text-emerald-800">{caseItem.vendor_name}</p>
+            <p className="mt-1 text-xs text-slate-500">{caseItem.vendor_name}</p>
           ) : null}
         </div>
       </div>
-      <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-emerald-900">
+
+      <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-700">
         <Fact
           label="約定到場"
           value={
@@ -422,7 +508,57 @@ function RespondedCaseCard({
         />
         <Fact label="備註" value={caseItem.vendor_note} />
       </dl>
+
+      {unlocked ? (
+        <div className="mt-3 rounded-lg border border-sky-400 bg-white px-3 py-2">
+          <p className="text-xs font-semibold text-sky-900">
+            <span aria-hidden="true">🔓 </span>
+            住戶已確認，聯絡資訊已解鎖
+          </p>
+          <dl className="mt-1.5 space-y-1 text-sm">
+            <UnlockedRow label="地址" value={d.address} />
+            <UnlockedRow label="聯絡人" value={d.contact_name} />
+            <UnlockedRow label="電話" value={d.contact_phone} />
+          </dl>
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs text-violet-900">
+          <span aria-hidden="true">🔒 </span>
+          等待住戶確認報價，確認後才會提供完整地址與電話。目前只知道
+          {d.area ?? "服務地區"}。
+        </p>
+      )}
+
+      {canComplete ? (
+        <button
+          type="button"
+          onClick={() => onComplete(caseItem)}
+          disabled={disabled}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          {busy ? (
+            <>
+              <span
+                aria-hidden="true"
+                className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+              />
+              處理中…
+            </>
+          ) : (
+            "標記為已完成"
+          )}
+        </button>
+      ) : null}
     </article>
+  );
+}
+
+function UnlockedRow({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="w-12 shrink-0 text-xs text-slate-400">{label}</dt>
+      <dd className="font-medium text-slate-900">{value ?? "—"}</dd>
+    </div>
   );
 }
 

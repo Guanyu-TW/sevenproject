@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Path, status
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Path, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -7,8 +9,11 @@ from app.models import ConsultationCase, Vendor
 from app.schemas.case import CaseRead, CreateCaseRequest
 from app.services.case_service import (
     CaseCreationError,
+    CaseTransitionError,
     DuplicateCaseError,
     STATUS_LABELS,
+    complete_case,
+    confirm_case,
     create_case,
     get_case,
     to_case_read,
@@ -109,3 +114,57 @@ def read_case_by_task(db: DbSession, task_id: int = Path(ge=1)) -> CaseRead | No
     if case is None:
         return None
     return to_case_read(get_case(db, case.id))
+
+
+@router.post(
+    "/{case_id}/confirm",
+    response_model=CaseRead,
+    summary="Resident confirms the quote, unlocking their contact details",
+)
+def confirm(db: DbSession, case_id: int = Path(ge=1)) -> CaseRead:
+    """Move a case from ``vendor_accepted`` to ``contact_shared``.
+
+    This is the point where the vendor gains access to the full address, name
+    and phone number, so it is deliberately a resident-initiated action.
+    """
+    try:
+        case = confirm_case(db, case_id=case_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except CaseTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    return to_case_read(case)
+
+
+@router.post(
+    "/{case_id}/complete",
+    response_model=CaseRead,
+    summary="Mark the service as delivered (either side may call this)",
+)
+def complete(
+    db: DbSession,
+    case_id: int = Path(ge=1),
+    actor: Literal["consumer", "vendor"] = Query(
+        default="consumer", description="誰按下完成，僅用於稽核紀錄。"
+    ),
+) -> CaseRead:
+    """Move a case from ``contact_shared`` to ``completed``.
+
+    Also closes the owning LifeTask, which is what advances the dashboard's
+    "已完成任務" counter.
+    """
+    try:
+        case = complete_case(db, case_id=case_id, actor=actor)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except CaseTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    return to_case_read(case)

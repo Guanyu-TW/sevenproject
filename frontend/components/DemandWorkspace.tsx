@@ -7,6 +7,8 @@ import {
   ApiError,
   DuplicateCaseError,
   analyzeDemand,
+  completeCase,
+  confirmCase,
   createCase,
   getCase,
   matchVendors,
@@ -35,6 +37,23 @@ function describeError(err: unknown, prefix: string): string {
   return `${prefix}：發生未知錯誤`;
 }
 
+/** Statuses where the vendor may still act, so the board keeps polling. */
+const POLLED_STATUSES = new Set(["waiting_vendor_response", "contact_shared"]);
+
+function describeStatusChange(fresh: ConsultationCase): string {
+  const tail = fresh.next_action ?? "";
+  switch (fresh.status) {
+    case "vendor_accepted":
+      return `好消息，${fresh.vendor.name} 已經接單了！${tail}`;
+    case "vendor_rejected":
+      return `${fresh.vendor.name} 婉拒了這次委託。${tail}`;
+    case "completed":
+      return `${fresh.vendor.name} 已標記服務完成。${tail}`;
+    default:
+      return `案件狀態更新為「${fresh.status_label}」。${tail}`;
+  }
+}
+
 /** Owns the shared state between the chat column and the result column. */
 export default function DemandWorkspace() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -44,6 +63,7 @@ export default function DemandWorkspace() {
   const [matchResult, setMatchResult] = useState<MatchVendorsResponse | null>(null);
   const [caseDetail, setCaseDetail] = useState<ConsultationCase | null>(null);
   const [creatingCaseFor, setCreatingCaseFor] = useState<number | null>(null);
+  const [busyAction, setBusyAction] = useState<"confirm" | "complete" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef<AbortController | null>(null);
 
@@ -243,7 +263,9 @@ export default function DemandWorkspace() {
    */
   useEffect(() => {
     if (!caseDetail) return;
-    if (caseDetail.status !== "waiting_vendor_response") return;
+    // Poll while the other side could still move the case. Terminal states and
+    // "waiting on the resident" need no polling.
+    if (!POLLED_STATUSES.has(caseDetail.status)) return;
 
     const controller = new AbortController();
     const timer = setInterval(async () => {
@@ -251,14 +273,7 @@ export default function DemandWorkspace() {
         const fresh = await getCase(caseDetail.id, controller.signal);
         if (fresh.status !== caseDetail.status) {
           setCaseDetail(fresh);
-          say(
-            "assistant",
-            fresh.status === "vendor_accepted"
-              ? `好消息，${fresh.vendor.name} 已經接單了！` +
-                  `${fresh.next_action ?? ""}`
-              : `${fresh.vendor.name} 婉拒了這次委託。` +
-                  `${fresh.next_action ?? ""}`,
-          );
+          say("assistant", describeStatusChange(fresh));
         }
       } catch {
         // Transient failure; the next tick retries.
@@ -269,6 +284,51 @@ export default function DemandWorkspace() {
       controller.abort();
       clearInterval(timer);
     };
+  }, [caseDetail, say]);
+
+  /** Resident accepts the quote, handing their contact details to the vendor. */
+  const confirmContact = useCallback(async () => {
+    if (!caseDetail) return;
+    setBusyAction("confirm");
+    setError(null);
+    say("user", "我確認這位廠商的報價與時間，請提供我的聯絡資訊。");
+    try {
+      const updated = await confirmCase(caseDetail.id);
+      setCaseDetail(updated);
+      say(
+        "assistant",
+        `已把完整地址與聯絡電話提供給 ${updated.vendor.name}。` +
+          `${updated.next_action ?? ""}`,
+      );
+    } catch (err) {
+      setError(describeError(err, "確認失敗"));
+      say("assistant", "抱歉，這次確認沒有成功。");
+    } finally {
+      setBusyAction(null);
+    }
+  }, [caseDetail, say]);
+
+  const markComplete = useCallback(async () => {
+    if (!caseDetail) return;
+    setBusyAction("complete");
+    setError(null);
+    say("user", "服務已經完成了。");
+    try {
+      const updated = await completeCase(caseDetail.id, "consumer");
+      setCaseDetail(updated);
+      // The task is closed now, so the workspace's copy is stale.
+      setTask((prev) =>
+        prev && prev.id === updated.task_id
+          ? { ...prev, status: updated.task_status, next_action: updated.next_action }
+          : prev,
+      );
+      say("assistant", `案件 ${updated.case_number} 已標記完成。感謝您的使用！`);
+    } catch (err) {
+      setError(describeError(err, "標記完成失敗"));
+      say("assistant", "抱歉，這次標記沒有成功。");
+    } finally {
+      setBusyAction(null);
+    }
   }, [caseDetail, say]);
 
   const refreshCase = useCallback(async () => {
@@ -300,6 +360,9 @@ export default function DemandWorkspace() {
         onSelectVendor={(vendor) => void selectVendor(vendor)}
         onBackToVendors={() => setCaseDetail(null)}
         onRefreshCase={() => void refreshCase()}
+        onConfirmContact={() => void confirmContact()}
+        onCompleteCase={() => void markComplete()}
+        busyAction={busyAction}
       />
     </div>
   );

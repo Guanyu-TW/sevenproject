@@ -60,9 +60,11 @@ class VendorCaseListResponse(BaseModel):
     vendor: VendorSummary | None = None
     total: int = Field(description="範圍內的案件總數（待接單 + 已接單）。")
     pending: int = Field(description="狀態為 waiting_vendor_response 的總件數。")
-    responded_total: int = Field(default=0, description="已回覆案件的總件數。")
+    responded_total: int = Field(default=0, description="進行中案件的總件數。")
+    completed_total: int = Field(default=0, description="已完成案件的總件數。")
     pending_shown: int = Field(default=0, description="本次回傳的待接單件數。")
-    responded_shown: int = Field(default=0, description="本次回傳的已回覆件數。")
+    responded_shown: int = Field(default=0, description="本次回傳的進行中件數。")
+    completed_shown: int = Field(default=0, description="本次回傳的已完成件數。")
     truncated: bool = Field(
         default=False, description="True 表示有案件因為 limit 沒有回傳。"
     )

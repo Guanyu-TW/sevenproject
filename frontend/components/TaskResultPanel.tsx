@@ -24,6 +24,9 @@ type Props = {
   onSelectVendor: (vendor: VendorRecommendation) => void;
   onBackToVendors: () => void;
   onRefreshCase: () => void;
+  onConfirmContact: () => void;
+  onCompleteCase: () => void;
+  busyAction: "confirm" | "complete" | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -50,6 +53,9 @@ export default function TaskResultPanel({
   onSelectVendor,
   onBackToVendors,
   onRefreshCase,
+  onConfirmContact,
+  onCompleteCase,
+  busyAction,
 }: Props) {
   const view: View =
     caseDetail !== null ? "case" : matchResult !== null ? "vendors" : "task";
@@ -63,7 +69,9 @@ export default function TaskResultPanel({
   return (
     <section
       aria-labelledby="task-heading"
-      aria-busy={loading || matching || creatingCaseFor !== null}
+      aria-busy={
+        loading || matching || creatingCaseFor !== null || busyAction !== null
+      }
       className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm"
     >
       <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -86,6 +94,9 @@ export default function TaskResultPanel({
             caseDetail={caseDetail}
             onBackToVendors={onBackToVendors}
             onRefresh={onRefreshCase}
+            onConfirm={onConfirmContact}
+            onComplete={onCompleteCase}
+            busyAction={busyAction}
           />
         ) : null}
 

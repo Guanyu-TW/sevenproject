@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import (
     ALLOWED_CASE_TRANSITIONS,
     VENDOR_ACTIONABLE_STATUSES,
+    VENDOR_IN_PROGRESS_STATUSES,
     CaseStatus,
     CaseStatusHistory,
     ConsultationCase,
@@ -100,9 +101,14 @@ def list_vendor_cases(
     wanted = statuses or [
         CaseStatus.WAITING_VENDOR_RESPONSE,
         CaseStatus.VENDOR_ACCEPTED,
+        CaseStatus.CONTACT_SHARED,
+        CaseStatus.COMPLETED,
     ]
     pending_wanted = [s for s in wanted if s == CaseStatus.WAITING_VENDOR_RESPONSE]
-    responded_wanted = [s for s in wanted if s != CaseStatus.WAITING_VENDOR_RESPONSE]
+    responded_wanted = [
+        s for s in wanted if s in VENDOR_IN_PROGRESS_STATUSES
+    ]
+    done_wanted = [s for s in wanted if s == CaseStatus.COMPLETED]
 
     def scoped(stmt):
         return stmt if vendor_id is None else stmt.where(
@@ -120,6 +126,12 @@ def list_vendor_cases(
                     .options(
                         selectinload(ConsultationCase.task).selectinload(
                             LifeTask.category
+                        ),
+                        # _build_shared_view reads task.user.name as the
+                        # contact fallback; without this the inbox would fire
+                        # one extra SELECT per case.
+                        selectinload(ConsultationCase.task).selectinload(
+                            LifeTask.user
                         ),
                         selectinload(ConsultationCase.vendor),
                     )
@@ -150,24 +162,29 @@ def list_vendor_cases(
     # none of them.
     pending_cases = fetch(pending_wanted)
     responded_cases = fetch(responded_wanted)
-    cases = pending_cases + responded_cases
+    done_cases = fetch(done_wanted)
+    cases = pending_cases + responded_cases + done_cases
 
     pending_total = count([CaseStatus.WAITING_VENDOR_RESPONSE])
     responded_total = count(responded_wanted)
+    completed_total = count(done_wanted)
 
     if summary is not None:
         summary.open_case_count = pending_total
 
     return VendorCaseListResponse(
         vendor=summary,
-        total=pending_total + responded_total,
+        total=pending_total + responded_total + completed_total,
         pending=pending_total,
         responded_total=responded_total,
+        completed_total=completed_total,
         pending_shown=len(pending_cases),
         responded_shown=len(responded_cases),
+        completed_shown=len(done_cases),
         truncated=(
             len(pending_cases) < pending_total
             or len(responded_cases) < responded_total
+            or len(done_cases) < completed_total
         ),
         cases=[
             VendorCaseListItem(

@@ -25,3 +25,6 @@ next-env.d.ts
 .idea/
 .DS_Store
 Thumbs.db
+
+# TypeScript incremental build cache
+*.tsbuildinfo

@@ -53,12 +53,20 @@ class CaseStatus(StrEnum):
 
     WAITING_VENDOR_RESPONSE = "waiting_vendor_response"
     VENDOR_ACCEPTED = "vendor_accepted"
-    AWAITING_USER_CONFIRMATION = "awaiting_user_confirmation"
-    CONFIRMED = "confirmed"
-    VENDOR_REJECTED = "vendor_rejected"
+    #: The resident confirmed the quote, so the vendor may now see the full
+    #: address and phone number. The status name *is* the privacy gate: there is
+    #: deliberately no separate boolean that could drift out of step with it.
+    CONTACT_SHARED = "contact_shared"
     COMPLETED = "completed"
+    VENDOR_REJECTED = "vendor_rejected"
     CANCELLED = "cancelled"
 
+
+#: Statuses in which the vendor is allowed to see the resident's full address,
+#: name and phone number.
+CONTACT_UNLOCKED_STATUSES: frozenset[CaseStatus] = frozenset(
+    {CaseStatus.CONTACT_SHARED, CaseStatus.COMPLETED}
+)
 
 #: A task may only hold one case in any of these states at a time. Anything
 #: else (rejected / cancelled) frees the task up to pick another vendor.
@@ -66,8 +74,7 @@ ACTIVE_CASE_STATUSES: frozenset[CaseStatus] = frozenset(
     {
         CaseStatus.WAITING_VENDOR_RESPONSE,
         CaseStatus.VENDOR_ACCEPTED,
-        CaseStatus.AWAITING_USER_CONFIRMATION,
-        CaseStatus.CONFIRMED,
+        CaseStatus.CONTACT_SHARED,
         CaseStatus.COMPLETED,
     }
 )
@@ -75,6 +82,11 @@ ACTIVE_CASE_STATUSES: frozenset[CaseStatus] = frozenset(
 #: Cases the vendor still has to act on.
 VENDOR_ACTIONABLE_STATUSES: frozenset[CaseStatus] = frozenset(
     {CaseStatus.WAITING_VENDOR_RESPONSE}
+)
+
+#: Cases in flight after the vendor accepted.
+VENDOR_IN_PROGRESS_STATUSES: frozenset[CaseStatus] = frozenset(
+    {CaseStatus.VENDOR_ACCEPTED, CaseStatus.CONTACT_SHARED}
 )
 
 #: Which case transitions the API will accept.
@@ -87,16 +99,11 @@ ALLOWED_CASE_TRANSITIONS: dict[CaseStatus, frozenset[CaseStatus]] = {
         }
     ),
     CaseStatus.VENDOR_ACCEPTED: frozenset(
-        {
-            CaseStatus.AWAITING_USER_CONFIRMATION,
-            CaseStatus.CONFIRMED,
-            CaseStatus.CANCELLED,
-        }
+        {CaseStatus.CONTACT_SHARED, CaseStatus.CANCELLED}
     ),
-    CaseStatus.AWAITING_USER_CONFIRMATION: frozenset(
-        {CaseStatus.CONFIRMED, CaseStatus.CANCELLED}
+    CaseStatus.CONTACT_SHARED: frozenset(
+        {CaseStatus.COMPLETED, CaseStatus.CANCELLED}
     ),
-    CaseStatus.CONFIRMED: frozenset({CaseStatus.COMPLETED, CaseStatus.CANCELLED}),
     CaseStatus.VENDOR_REJECTED: frozenset(),
     CaseStatus.COMPLETED: frozenset(),
     CaseStatus.CANCELLED: frozenset(),

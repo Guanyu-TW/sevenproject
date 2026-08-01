@@ -219,6 +219,13 @@ export type SharedWithVendor = {
   budget_amount?: number | null;
   urgency?: string | null;
   preferred_time?: string | null;
+  /** Coarse location, always shared. */
+  area?: string | null;
+  /** True once the resident confirmed; the three fields below are then set. */
+  contact_unlocked: boolean;
+  address?: string | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
   withheld: string[];
 };
 
@@ -358,9 +365,11 @@ export type VendorCaseListResponse = {
   total: number;
   pending: number;
   responded_total: number;
+  completed_total: number;
   /** How many of `pending` are actually in `cases`. */
   pending_shown: number;
   responded_shown: number;
+  completed_shown: number;
   truncated: boolean;
   cases: VendorCaseListItem[];
 };
@@ -425,4 +434,32 @@ export async function respondToCase(
   );
   if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
   return (await res.json()) as VendorRespondResponse;
+}
+
+/** Resident accepts the quote, unlocking their contact details to the vendor. */
+export async function confirmCase(
+  caseId: number,
+  signal?: AbortSignal,
+): Promise<ConsultationCase> {
+  const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}/confirm`, {
+    method: "POST",
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as ConsultationCase;
+}
+
+/** Mark the service delivered. `actor` is recorded in the audit trail. */
+export async function completeCase(
+  caseId: number,
+  actor: "consumer" | "vendor" = "consumer",
+  signal?: AbortSignal,
+): Promise<ConsultationCase> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/cases/${caseId}/complete?actor=${actor}`,
+    { method: "POST", cache: "no-store", signal },
+  );
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as ConsultationCase;
 }

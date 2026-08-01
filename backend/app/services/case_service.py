@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.models import (
     ACTIVE_CASE_STATUSES,
+    ALLOWED_CASE_TRANSITIONS,
     CaseStatus,
     CaseStatusHistory,
     ConsultationCase,
@@ -46,10 +47,9 @@ PRIVACY_NOTICE = (
 STATUS_LABELS: dict[CaseStatus, str] = {
     CaseStatus.WAITING_VENDOR_RESPONSE: "等待廠商回覆",
     CaseStatus.VENDOR_ACCEPTED: "廠商已接單",
-    CaseStatus.AWAITING_USER_CONFIRMATION: "等待你確認",
-    CaseStatus.CONFIRMED: "已確認，等待到場",
-    CaseStatus.VENDOR_REJECTED: "廠商婉拒",
+    CaseStatus.CONTACT_SHARED: "已交換聯絡資訊",
     CaseStatus.COMPLETED: "已完成",
+    CaseStatus.VENDOR_REJECTED: "廠商婉拒",
     CaseStatus.CANCELLED: "已取消",
 }
 
@@ -60,19 +60,18 @@ STATUS_GUIDANCE: dict[CaseStatus, tuple[str, str | None]] = {
         None,
     ),
     CaseStatus.VENDOR_ACCEPTED: (
-        "廠商已確認接案！預計於指定時間到場服務，請確保聯絡電話暢通。",
+        "廠商已確認接案！請確認報價與到場時間，確認後才會把完整地址與電話提供給廠商。",
         None,
     ),
-    CaseStatus.AWAITING_USER_CONFIRMATION: (
-        "請確認是否成立案件，確認後才會把聯絡資訊提供給廠商。",
+    CaseStatus.CONTACT_SHARED: (
+        "已與廠商交換聯絡資訊，請等待廠商到場服務。",
         None,
     ),
-    CaseStatus.CONFIRMED: ("已確認，等待廠商到場服務。", None),
+    CaseStatus.COMPLETED: ("服務已完成，感謝您的使用！", None),
     CaseStatus.VENDOR_REJECTED: (
         "建議回到推薦清單改選其他廠商。",
         "廠商婉拒了這次委託。",
     ),
-    CaseStatus.COMPLETED: ("案件已完成，歡迎給廠商評價。", None),
     CaseStatus.CANCELLED: ("案件已取消，可以重新提出需求。", "案件已取消。"),
 }
 
@@ -136,6 +135,9 @@ def get_case(db: Session, case_id: int) -> ConsultationCase:
         .options(
             selectinload(ConsultationCase.vendor).selectinload(Vendor.categories),
             selectinload(ConsultationCase.task).selectinload(LifeTask.category),
+            # _build_shared_view falls back to the account name, so eager-load
+            # the user too rather than lazy-loading it per case.
+            selectinload(ConsultationCase.task).selectinload(LifeTask.user),
             selectinload(ConsultationCase.history),
         )
         .where(ConsultationCase.id == case_id)
@@ -200,7 +202,6 @@ def create_case(
             form_data=form_data or {},
             next_action=next_action,
             blocked_reason=blocked_reason,
-            contact_shared=False,
         )
         db.add(case)
         try:
@@ -286,9 +287,19 @@ def _build_shared_view(case: ConsultationCase) -> SharedWithVendor:
     except (TypeError, ValueError):
         amount = None
 
+    contact = parsed.get("contact") or {}
+    city = location.get("city")
+    district = location.get("district")
+    area = " ".join(p for p in (city, district) if p) or None
+
+    unlocked = case.contact_shared
     title = parsed.get("title")
     summary = parsed.get("summary")
-    if not case.contact_shared:
+
+    if not unlocked:
+        # Redact the LLM-written free text too: it happily repeats a street name
+        # the resident mentioned in their original sentence, which would leak
+        # the address around the structured field being withheld.
         terms = sensitive_terms(parsed, case.form_data)
         title = redact(title, terms)
         summary = redact(summary, terms)
@@ -297,12 +308,140 @@ def _build_shared_view(case: ConsultationCase) -> SharedWithVendor:
         title=title,
         summary=summary,
         category_name=case.task.category.name if case.task.category else None,
-        city=location.get("city"),
-        district=location.get("district"),
+        city=city,
+        district=district,
+        area=area,
         budget_amount=amount,
         urgency=parsed.get("urgency"),
         preferred_time=parsed.get("preferred_time"),
-        withheld=[] if case.contact_shared else list(WITHHELD_LABELS),
+        contact_unlocked=unlocked,
+        address=location.get("address") if unlocked else None,
+        # Fall back to the account holder. Whether the AI asks for
+        # contact_name is its own judgement call, so parsed contact.name is
+        # genuinely often null -- and a vendor standing at the door with no
+        # name to ask for is worse than showing the account name. Still gated
+        # behind `unlocked`, so this leaks nothing earlier than before.
+        contact_name=(contact.get("name") or case.task.user.name)
+        if unlocked
+        else None,
+        contact_phone=contact.get("phone") if unlocked else None,
+        withheld=[] if unlocked else list(WITHHELD_LABELS),
+    )
+
+
+class CaseTransitionError(RuntimeError):
+    """The case is not in a state where this action makes sense."""
+
+    def __init__(self, message: str, *, code: str = "invalid_state"):
+        super().__init__(message)
+        self.code = code
+
+
+def _advance(
+    db: Session,
+    *,
+    case_id: int,
+    target: CaseStatus,
+    actor: str,
+    note: str,
+    task_status: TaskStatus | None = None,
+) -> ConsultationCase:
+    """Move a case to ``target``, writing history and the task's next_action.
+
+    Locks the row before reading its status: without that, two concurrent calls
+    would both pass the transition guard and the second would silently overwrite
+    the first, appending a duplicate history entry.
+    """
+    locked = db.execute(
+        select(ConsultationCase.id)
+        .where(ConsultationCase.id == case_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if locked is None:
+        raise LookupError(f"Case {case_id} does not exist")
+
+    case = get_case(db, case_id)
+    previous = case.status
+
+    if target not in ALLOWED_CASE_TRANSITIONS.get(previous, frozenset()):
+        raise CaseTransitionError(
+            f"案件目前狀態是「{STATUS_LABELS.get(previous, previous)}」，"
+            f"無法執行這個操作。",
+            code="invalid_state",
+        )
+
+    now = datetime.now(timezone.utc)
+    next_action, blocked_reason = STATUS_GUIDANCE[target]
+
+    case.status = target
+    case.next_action = next_action
+    case.blocked_reason = blocked_reason
+    if target is CaseStatus.CONTACT_SHARED:
+        case.confirmed_at = now
+    elif target is CaseStatus.COMPLETED:
+        case.completed_at = now
+
+    # Appended through the relationship so the already-loaded collection stays
+    # in step with the database (the session uses expire_on_commit=False).
+    case.history.append(
+        CaseStatusHistory(
+            from_status=previous.value,
+            to_status=target.value,
+            actor=actor,
+            note=note,
+        )
+    )
+
+    task = case.task
+    task.next_action = next_action
+    if task_status is not None:
+        task.status = task_status
+
+    db.add(case)
+    db.add(task)
+    db.commit()
+
+    logger.info(
+        "Case %s %s -> %s by %s", case.case_number, previous, target, actor
+    )
+    return get_case(db, case_id)
+
+
+def confirm_case(db: Session, *, case_id: int) -> ConsultationCase:
+    """Resident accepts the quote, unlocking their contact details.
+
+    Raises:
+        LookupError: no such case.
+        CaseTransitionError: the case is not at vendor_accepted.
+    """
+    case = _advance(
+        db,
+        case_id=case_id,
+        target=CaseStatus.CONTACT_SHARED,
+        actor="consumer",
+        note="住戶確認報價與到場時間，已將完整地址與聯絡電話提供給廠商。",
+    )
+    return case
+
+
+def complete_case(db: Session, *, case_id: int, actor: str = "consumer") -> ConsultationCase:
+    """Mark the service as delivered. Callable by either side.
+
+    Also closes the owning task, which is what makes the dashboard's
+    "已完成任務" counter move.
+
+    Raises:
+        LookupError: no such case.
+        CaseTransitionError: the case is not at contact_shared.
+    """
+    who = "廠商" if actor == "vendor" else "住戶"
+    return _advance(
+        db,
+        case_id=case_id,
+        target=CaseStatus.COMPLETED,
+        actor=actor,
+        note=f"{who}標記服務已完成。",
+        task_status=TaskStatus.COMPLETED,
     )
 
 
@@ -339,7 +478,8 @@ def _build_timeline(case: ConsultationCase) -> list[CaseTimelineStep]:
         None,
     )
     confirmed = next(
-        (h for h in case.history if h.to_status == CaseStatus.CONFIRMED.value), None
+        (h for h in case.history if h.to_status == CaseStatus.CONTACT_SHARED.value),
+        None,
     )
     completed = next(
         (h for h in case.history if h.to_status == CaseStatus.COMPLETED.value), None
@@ -373,12 +513,7 @@ def _build_timeline(case: ConsultationCase) -> list[CaseTimelineStep]:
             label="廠商回覆",
             state=state(
                 confirmed is not None or completed is not None,
-                status
-                in (
-                    CaseStatus.VENDOR_ACCEPTED,
-                    CaseStatus.VENDOR_REJECTED,
-                    CaseStatus.AWAITING_USER_CONFIRMATION,
-                ),
+                status in (CaseStatus.VENDOR_ACCEPTED, CaseStatus.VENDOR_REJECTED),
             ),
             at=responded.created_at if responded else None,
             note=_vendor_response_note(case),
@@ -386,13 +521,14 @@ def _build_timeline(case: ConsultationCase) -> list[CaseTimelineStep]:
         CaseTimelineStep(
             key="confirmed",
             label="你確認並交換聯絡資訊",
-            state=state(completed is not None, status == CaseStatus.CONFIRMED),
+            state=state(completed is not None, status == CaseStatus.CONTACT_SHARED),
             at=confirmed.created_at if confirmed else None,
+            note="廠商已可看到完整地址與聯絡電話。" if confirmed else None,
         ),
         CaseTimelineStep(
             key="completed",
             label="服務完成",
-            state=state(False, status == CaseStatus.COMPLETED),
+            state="done" if status == CaseStatus.COMPLETED else "upcoming",
             at=completed.created_at if completed else None,
         ),
     ]
@@ -439,9 +575,13 @@ def to_case_read(case: ConsultationCase) -> CaseRead:
 
 __all__ = [
     "CaseCreationError",
+    "CaseTransitionError",
     "DuplicateCaseError",
     "PRIVACY_NOTICE",
+    "STATUS_GUIDANCE",
     "STATUS_LABELS",
+    "complete_case",
+    "confirm_case",
     "create_case",
     "find_active_case",
     "get_case",

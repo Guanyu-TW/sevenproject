@@ -1,4 +1,5 @@
 from datetime import datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime
@@ -8,7 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base, TimestampMixin
-from app.models.enums import CaseStatus
+from app.models.enums import CONTACT_UNLOCKED_STATUSES, CaseStatus
 
 if TYPE_CHECKING:
     from app.models.case_status_history import CaseStatusHistory
@@ -54,6 +55,12 @@ class ConsultationCase(TimestampMixin, Base):
     )
     next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     blocked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     #: Filled in when the vendor responds.
     vendor_note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -63,12 +70,6 @@ class ConsultationCase(TimestampMixin, Base):
     responded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    #: False until the resident confirms; gates the vendor's access to the
-    #: resident's name, phone and full address.
-    contact_shared: Mapped[bool] = mapped_column(
-        nullable=False, default=False, server_default="false"
-    )
-
     task: Mapped["LifeTask"] = relationship(back_populates="consultation_cases")
     vendor: Mapped["Vendor"] = relationship(back_populates="consultation_cases")
     history: Mapped[list["CaseStatusHistory"]] = relationship(
@@ -76,6 +77,15 @@ class ConsultationCase(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="CaseStatusHistory.id",
     )
+
+    @property
+    def contact_shared(self) -> bool:
+        """Whether the vendor may see the resident's address, name and phone.
+
+        Derived from ``status`` rather than stored: a separate boolean column
+        was a second source of truth that could disagree with the status.
+        """
+        return self.status in CONTACT_UNLOCKED_STATUSES
 
     def __repr__(self) -> str:
         return (

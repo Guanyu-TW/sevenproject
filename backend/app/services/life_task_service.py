@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.models import (
@@ -211,12 +212,17 @@ def update_task(
         updated_parsed, applied = apply_filled_fields(task.parsed_data or {}, filled_fields)
         if applied:
             task.parsed_data = updated_parsed
+            # JSONB columns are not mutation-tracked, and equality against the
+            # previous value is not a reliable dirty check for nested dicts.
+            # Flag it explicitly so the UPDATE always includes this column.
+            flag_modified(task, "parsed_data")
             remaining = [
                 field
                 for field in (task.missing_fields or [])
                 if _field_key(field) not in set(applied)
             ]
             task.missing_fields = remaining
+            flag_modified(task, "missing_fields")
             logger.info(
                 "Task %s filled %s, %d field(s) still missing",
                 task.id,

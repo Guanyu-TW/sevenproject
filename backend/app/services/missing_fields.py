@@ -12,6 +12,7 @@ Adding an askable field is therefore a single edit here.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -244,8 +245,15 @@ def apply_filled_fields(
     stored, so the caller can prune ``missing_fields``. Blank submissions are
     ignored: a user clicking through without typing must not overwrite what the
     AI already extracted.
+
+    The copy is deep on purpose. A shallow ``dict()`` shares the nested
+    ``location`` / ``contact`` dicts with the caller's object, so writing into
+    them mutated the ORM attribute in place; SQLAlchemy then compared the new
+    value against an already-mutated "old" value, found them equal, and skipped
+    the UPDATE entirely. The change appeared to work because the response was
+    serialised from the mutated in-memory object.
     """
-    updated = dict(parsed_data)
+    updated = deepcopy(parsed_data)
     applied: list[str] = []
 
     for key, raw_value in filled.items():

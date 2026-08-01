@@ -51,7 +51,8 @@ class SharedWithVendor(BaseModel):
     """Exactly what the vendor can see right now.
 
     Returned so the privacy promise in the UI is verifiable rather than
-    decorative: anything the vendor cannot see is listed in ``withheld``.
+    decorative: anything the vendor cannot see is listed in ``withheld``, and
+    the locked fields below stay ``None`` until the resident confirms.
     """
 
     title: str | None = None
@@ -62,6 +63,20 @@ class SharedWithVendor(BaseModel):
     budget_amount: float | None = None
     urgency: str | None = None
     preferred_time: str | None = None
+
+    #: Coarse location, always shared: enough to judge "is this my area?".
+    area: str | None = Field(
+        default=None, description="縣市 + 行政區，例如「台北市信義區」。"
+    )
+
+    # --- unlocked only once the case reaches contact_shared -------------- #
+    contact_unlocked: bool = False
+    address: str | None = Field(
+        default=None, description="完整門牌，未解鎖時為 null。"
+    )
+    contact_name: str | None = None
+    contact_phone: str | None = None
+
     withheld: list[str] = Field(default_factory=list)
 
 
