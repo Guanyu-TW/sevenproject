@@ -189,6 +189,24 @@ def update_task(
                 requested=str(status),
             )
 
+        # Matching filters on category first, so a task without one can never
+        # produce a candidate. Letting it become ready_for_matching would send
+        # the resident through a form only to end at an empty vendor list.
+        if status is TaskStatus.READY_FOR_MATCHING and task.category_id is None:
+            intent = (task.parsed_data or {}).get("intent")
+            if intent == "question":
+                reason = "這是一個詢問，不是服務需求，所以不會進入媒合。"
+            elif intent == "other":
+                reason = "我沒有辨識出具體的服務需求。"
+            else:
+                reason = "這個需求不屬於平台目前提供的服務分類。"
+            raise TaskTransitionError(
+                f"{reason}請換一種說法描述你需要的服務，"
+                "目前支援水電維修、居家清潔、餐飲訂購與代購採買。",
+                current=str(task.status),
+                requested=str(status),
+            )
+
     if filled_fields:
         updated_parsed, applied = apply_filled_fields(task.parsed_data or {}, filled_fields)
         if applied:

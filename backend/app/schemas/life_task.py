@@ -21,6 +21,7 @@ class LifeTaskRead(BaseModel):
     raw_input: str | None
     parsed_data: dict[str, Any]
     missing_fields: list[MissingField]
+    next_action: str | None = None
     created_at: datetime
     updated_at: datetime
 

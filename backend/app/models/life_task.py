@@ -46,6 +46,9 @@ class LifeTask(TimestampMixin, Base):
     missing_fields: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, default=list, server_default="[]"
     )
+    #: Plain-language description of what the resident should do next, kept in
+    #: sync with the task status so the UI never has to infer it.
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="life_tasks")
     category: Mapped["ServiceCategory | None"] = relationship(back_populates="life_tasks")

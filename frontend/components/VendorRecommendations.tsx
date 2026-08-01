@@ -5,9 +5,17 @@ import type { MatchVendorsResponse, VendorRecommendation } from "@/lib/api";
 type Props = {
   result: MatchVendorsResponse;
   onBack: () => void;
+  onSelect: (vendor: VendorRecommendation) => void;
+  /** vendor_id currently being turned into a case, if any. */
+  creatingFor: number | null;
 };
 
-export default function VendorRecommendations({ result, onBack }: Props) {
+export default function VendorRecommendations({
+  result,
+  onBack,
+  onSelect,
+  creatingFor,
+}: Props) {
   const { recommendations, candidate_count, fallback_used, fallback_reason } = result;
 
   return (
@@ -50,7 +58,13 @@ export default function VendorRecommendations({ result, onBack }: Props) {
         <ol className="space-y-3">
           {recommendations.map((vendor, index) => (
             <li key={vendor.vendor_id}>
-              <VendorCard vendor={vendor} rank={index + 1} />
+              <VendorCard
+                vendor={vendor}
+                rank={index + 1}
+                onSelect={onSelect}
+                creating={creatingFor === vendor.vendor_id}
+                disabled={creatingFor !== null}
+              />
             </li>
           ))}
         </ol>
@@ -62,24 +76,20 @@ export default function VendorRecommendations({ result, onBack }: Props) {
 function VendorCard({
   vendor,
   rank,
+  onSelect,
+  creating,
+  disabled,
 }: {
   vendor: VendorRecommendation;
   rank: number;
+  onSelect: (vendor: VendorRecommendation) => void;
+  creating: boolean;
+  disabled: boolean;
 }) {
   const priceRange =
     vendor.price_min != null && vendor.price_max != null
       ? `${vendor.price_min.toLocaleString("zh-TW")} - ${vendor.price_max.toLocaleString("zh-TW")} 元`
       : null;
-
-  function handleSelect() {
-    // Step 5 will POST this to create a ConsultationCase.
-    console.log("[選擇此廠商並建立案件]", {
-      vendor_id: vendor.vendor_id,
-      name: vendor.name,
-      estimated_price: vendor.estimated_price,
-      match_score: vendor.match_score,
-    });
-  }
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300">
@@ -142,10 +152,21 @@ function VendorCard({
 
       <button
         type="button"
-        onClick={handleSelect}
-        className="mt-3 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+        onClick={() => onSelect(vendor)}
+        disabled={disabled}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300"
       >
-        選擇此廠商並建立案件
+        {creating ? (
+          <>
+            <span
+              aria-hidden="true"
+              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+            />
+            建立案件中…
+          </>
+        ) : (
+          "選擇此廠商並建立案件"
+        )}
       </button>
     </article>
   );

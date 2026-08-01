@@ -20,8 +20,31 @@ type FileValues = Record<string, File[]>;
  * The control type comes from the backend field catalogue (`input_type`), so
  * adding a new askable field is a backend data change with no edit here.
  */
+const SUPPORTED = "水電維修、居家清潔、餐飲訂購、代購採買";
+
 export default function MissingFieldsForm({ task, submitting, onConfirm }: Props) {
   const fields = task.missing_fields;
+  const intent = task.parsed_data.intent;
+
+  // Matching filters on category first, so an unclassified task can never
+  // yield a vendor. Say so up front instead of offering a dead-end form.
+  if (task.category === null) {
+    return (
+      <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-4">
+        <p className="text-sm font-semibold text-slate-900">
+          {intent === "question"
+            ? "這看起來是一個問題，不是服務需求"
+            : intent === "other"
+              ? "我沒有辨識出具體的服務需求"
+              : "目前沒有提供這類服務"}
+        </p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          平台目前支援 {SUPPORTED}。請在左邊換一種說法描述你需要的服務，
+          例如「嘉義市西區水龍頭漏水，預算兩千」。
+        </p>
+      </div>
+    );
+  }
 
   const [values, setValues] = useState<TextValues>({});
   const [files, setFiles] = useState<FileValues>({});

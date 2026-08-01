@@ -1,8 +1,14 @@
 "use client";
 
+import CaseTrackingBoard from "@/components/CaseTrackingBoard";
 import MissingFieldsForm from "@/components/MissingFieldsForm";
 import VendorRecommendations from "@/components/VendorRecommendations";
-import type { LifeTask, MatchVendorsResponse } from "@/lib/api";
+import type {
+  ConsultationCase,
+  LifeTask,
+  MatchVendorsResponse,
+  VendorRecommendation,
+} from "@/lib/api";
 
 type Props = {
   task: LifeTask | null;
@@ -10,8 +16,13 @@ type Props = {
   /** Non-null once matching has returned; switches the panel to the vendor list. */
   matchResult: MatchVendorsResponse | null;
   matching: boolean;
+  /** Non-null once a case exists; takes priority over the vendor list. */
+  caseDetail: ConsultationCase | null;
+  creatingCaseFor: number | null;
   onConfirm: (filled: Record<string, string>) => void;
   onBackToTask: () => void;
+  onSelectVendor: (vendor: VendorRecommendation) => void;
+  onBackToVendors: () => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -23,25 +34,39 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "已取消",
 };
 
+/** Which of the three views the panel is showing. */
+type View = "task" | "vendors" | "case";
+
 export default function TaskResultPanel({
   task,
   loading,
   matchResult,
   matching,
+  caseDetail,
+  creatingCaseFor,
   onConfirm,
   onBackToTask,
+  onSelectVendor,
+  onBackToVendors,
 }: Props) {
-  const showVendors = matchResult !== null;
+  const view: View =
+    caseDetail !== null ? "case" : matchResult !== null ? "vendors" : "task";
+
+  const HEADINGS: Record<View, string> = {
+    task: "任務解析結果",
+    vendors: "廠商推薦清單",
+    case: "案件進度追蹤",
+  };
 
   return (
     <section
       aria-labelledby="task-heading"
-      aria-busy={loading || matching}
+      aria-busy={loading || matching || creatingCaseFor !== null}
       className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm"
     >
       <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
         <h2 id="task-heading" className="text-base font-semibold text-slate-900">
-          {showVendors ? "廠商推薦清單" : "任務解析結果"}
+          {HEADINGS[view]}
         </h2>
         {task ? (
           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
@@ -54,11 +79,23 @@ export default function TaskResultPanel({
         {loading && !task ? <SkeletonCard /> : null}
         {!loading && !task ? <Placeholder /> : null}
 
-        {task && showVendors ? (
-          <VendorRecommendations result={matchResult} onBack={onBackToTask} />
+        {task && view === "case" && caseDetail ? (
+          <CaseTrackingBoard
+            caseDetail={caseDetail}
+            onBackToVendors={onBackToVendors}
+          />
         ) : null}
 
-        {task && !showVendors ? (
+        {task && view === "vendors" && matchResult ? (
+          <VendorRecommendations
+            result={matchResult}
+            onBack={onBackToTask}
+            onSelect={onSelectVendor}
+            creatingFor={creatingCaseFor}
+          />
+        ) : null}
+
+        {task && view === "task" ? (
           <TaskCard
             task={task}
             dimmed={loading}

@@ -193,3 +193,134 @@ export async function matchVendors(
   }
   return (await res.json()) as MatchVendorsResponse;
 }
+
+export type CaseTimelineStep = {
+  key: string;
+  label: string;
+  state: "done" | "current" | "upcoming";
+  at?: string | null;
+  note?: string | null;
+};
+
+export type CaseHistoryEntry = {
+  from_status?: string | null;
+  to_status: string;
+  actor: string;
+  note?: string | null;
+  created_at: string;
+};
+
+export type SharedWithVendor = {
+  title?: string | null;
+  summary?: string | null;
+  category_name?: string | null;
+  city?: string | null;
+  district?: string | null;
+  budget_amount?: number | null;
+  urgency?: string | null;
+  preferred_time?: string | null;
+  withheld: string[];
+};
+
+export type VendorDetail = {
+  id: number;
+  name: string;
+  rating: number;
+  description?: string | null;
+  service_city?: string | null;
+  service_districts: string[];
+  price_min?: number | null;
+  price_max?: number | null;
+  categories: ServiceCategory[];
+};
+
+export type ConsultationCase = {
+  id: number;
+  case_number: string;
+  status: string;
+  status_label: string;
+  task_id: number;
+  task_status: string;
+  next_action?: string | null;
+  blocked_reason?: string | null;
+  estimated_price?: number | null;
+  recommendation_reason?: string | null;
+  contact_shared: boolean;
+  privacy_notice: string;
+  vendor: VendorDetail;
+  shared_with_vendor: SharedWithVendor;
+  timeline: CaseTimelineStep[];
+  history: CaseHistoryEntry[];
+  created_at: string;
+  updated_at: string;
+};
+
+/** Extra payload the API attaches to a duplicate-case 409. */
+export type CaseConflictDetail = {
+  message: string;
+  case_id: number;
+  case_number: string;
+  status: string;
+  status_label: string;
+};
+
+/** Thrown when a case already exists, carrying the id so the UI can jump to it. */
+export class DuplicateCaseError extends ApiError {
+  readonly detail: CaseConflictDetail;
+
+  constructor(detail: CaseConflictDetail) {
+    super(detail.message, 409);
+    this.name = "DuplicateCaseError";
+    this.detail = detail;
+  }
+}
+
+export async function createCase(
+  body: {
+    taskId: number;
+    selectedVendorId: number;
+    formData: Record<string, unknown>;
+    estimatedPrice?: number | null;
+    recommendationReason?: string | null;
+  },
+  signal?: AbortSignal,
+): Promise<ConsultationCase> {
+  const res = await fetch(`${API_BASE_URL}/api/cases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+    signal,
+  });
+
+  if (res.status === 409) {
+    // The duplicate branch returns a structured detail object.
+    const payload = (await res.json().catch(() => null)) as {
+      detail?: CaseConflictDetail | string;
+    } | null;
+    const detail = payload?.detail;
+    if (detail && typeof detail === "object" && "case_id" in detail) {
+      throw new DuplicateCaseError(detail);
+    }
+    throw new ApiError(typeof detail === "string" ? detail : "無法建立案件", 409);
+  }
+
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res), res.status);
+  }
+  return (await res.json()) as ConsultationCase;
+}
+
+export async function getCase(
+  caseId: number,
+  signal?: AbortSignal,
+): Promise<ConsultationCase> {
+  const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}`, {
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res), res.status);
+  }
+  return (await res.json()) as ConsultationCase;
+}

@@ -38,10 +38,29 @@ ALLOWED_TASK_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
 
 
 class CaseStatus(StrEnum):
-    """Lifecycle of a single vendor <-> task consultation."""
+    """Lifecycle of a single vendor <-> task consultation.
 
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    DECLINED = "declined"
+    Member order matches the PostgreSQL enum order after migration 0005 so the
+    two stay readable side by side.
+    """
+
+    WAITING_VENDOR_RESPONSE = "waiting_vendor_response"
+    VENDOR_ACCEPTED = "vendor_accepted"
+    AWAITING_USER_CONFIRMATION = "awaiting_user_confirmation"
+    CONFIRMED = "confirmed"
+    VENDOR_DECLINED = "vendor_declined"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+#: A task may only hold one case in any of these states at a time. Anything
+#: else (declined / cancelled) frees the task up to pick another vendor.
+ACTIVE_CASE_STATUSES: frozenset[CaseStatus] = frozenset(
+    {
+        CaseStatus.WAITING_VENDOR_RESPONSE,
+        CaseStatus.VENDOR_ACCEPTED,
+        CaseStatus.AWAITING_USER_CONFIRMATION,
+        CaseStatus.CONFIRMED,
+        CaseStatus.COMPLETED,
+    }
+)

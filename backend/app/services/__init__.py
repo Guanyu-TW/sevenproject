@@ -7,6 +7,14 @@ from app.services.ai_service import (
     get_ai_provider,
     register_provider,
 )
+from app.services.case_service import (
+    CaseCreationError,
+    DuplicateCaseError,
+    create_case,
+    find_active_case,
+    get_case,
+    to_case_read,
+)
 from app.services.health_service import check_database
 from app.services.life_task_service import (
     TaskTransitionError,
@@ -34,8 +42,14 @@ __all__ = [
     "ALLOWED_FIELD_KEYS",
     "AIProvider",
     "AIProviderError",
+    "CaseCreationError",
+    "DuplicateCaseError",
     "FIELD_CATALOG",
     "MatchingStateError",
+    "create_case",
+    "find_active_case",
+    "get_case",
+    "to_case_read",
     "MockAIProvider",
     "RealAIProvider",
     "TaskTransitionError",

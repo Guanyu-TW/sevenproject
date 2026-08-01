@@ -231,6 +231,8 @@ _SYSTEM_PROMPT_TEMPLATE = """\
    "other"（其他）之一。
 9. `confidence` 用 0 到 1 的小數，表示你對這次解析的信心。
 10. 所有給住戶看的文字（title、summary、label、reason）都用繁體中文。
+11. `title` 與 `summary` 之後會顯示給廠商，所以不要寫入完整門牌、路名、
+    電話或姓名。地點只寫到縣市與行政區即可，精確地址請放進 `location.address`。
 """
 
 
