@@ -97,6 +97,7 @@ class DemandContext(BaseModel):
     summary: str | None = None
     category_name: str | None = None
     service_type: str | None = None
+    service_label: str | None = None
     budget_amount: float | None = None
     currency: str | None = "TWD"
     city: str | None = None

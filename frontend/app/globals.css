@@ -7,5 +7,51 @@
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply min-h-screen bg-slate-50 text-slate-900 antialiased;
+  /* Two very light tints so the white cards read as raised instead of sitting
+     on a flat grey. Kept pale on purpose: body text stays slate-900 on
+     near-white, so contrast is unaffected. */
+  background-image:
+    radial-gradient(55rem 55rem at 108% -12%, rgb(186 230 253 / 0.5), transparent 62%),
+    radial-gradient(45rem 45rem at -8% -6%, rgb(216 210 254 / 0.42), transparent 58%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/* The app scrolls inside panels rather than the page, so the default chunky
+   track sat right next to the card borders. */
+@supports (scrollbar-width: thin) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184 / 0.5) transparent;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  @apply rounded-full border-[3px] border-solid border-transparent bg-slate-400/50 bg-clip-content;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-500/60 bg-clip-content;
+}
+
+/* Respect users who ask for less motion: the spinners and transitions in the
+   app are decorative. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

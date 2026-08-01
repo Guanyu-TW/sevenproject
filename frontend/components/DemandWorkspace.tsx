@@ -11,6 +11,7 @@ import {
   confirmCase,
   createCase,
   getCase,
+  getTask,
   matchVendors,
   updateTask,
   type ConsultationCase,
@@ -54,6 +55,39 @@ function describeStatusChange(fresh: ConsultationCase): string {
   }
 }
 
+/**
+ * Put the current task / case in the query string.
+ *
+ * Everything in this workspace used to live in component state alone, so
+ * switching to the dashboard or refreshing threw the case away -- and with it
+ * the only button that could confirm a quote, which left cases stuck at
+ * vendor_accepted forever. The URL is the cheapest durable place to keep the
+ * pointer, and it makes the page linkable from the dashboard.
+ */
+function syncUrl(params: { task?: number | null; case?: number | null }) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  const apply = (key: string, value: number | null | undefined) => {
+    if (value == null) url.searchParams.delete(key);
+    else url.searchParams.set(key, String(value));
+  };
+  apply("task", params.task);
+  apply("case", params.case);
+  // replaceState, not push: the back button should leave the page rather than
+  // walk backwards through one resident's own progress.
+  window.history.replaceState(null, "", url.toString());
+}
+
+function readUrlIds(): { taskId: number | null; caseId: number | null } {
+  if (typeof window === "undefined") return { taskId: null, caseId: null };
+  const q = new URLSearchParams(window.location.search);
+  const num = (key: string) => {
+    const raw = Number(q.get(key));
+    return Number.isInteger(raw) && raw > 0 ? raw : null;
+  };
+  return { taskId: num("task"), caseId: num("case") };
+}
+
 /** Owns the shared state between the chat column and the result column. */
 export default function DemandWorkspace() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -65,10 +99,69 @@ export default function DemandWorkspace() {
   const [creatingCaseFor, setCreatingCaseFor] = useState<number | null>(null);
   const [busyAction, setBusyAction] = useState<"confirm" | "complete" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Starts false and is raised inside the mount effect. Seeding it from
+  // window.location here instead would make the server render `false` and the
+  // first client render `true`, which is a hydration mismatch.
+  const [restoring, setRestoring] = useState(false);
   const inFlight = useRef<AbortController | null>(null);
 
   const say = useCallback((role: ChatMessage["role"], text: string) => {
     setMessages((prev) => [...prev, { id: nextId(), role, text }]);
+  }, []);
+
+  /**
+   * Reopen whatever ?task= / ?case= points at, so the dashboard can link
+   * straight back into a request and a refresh no longer loses it.
+   */
+  useEffect(() => {
+    const { taskId, caseId } = readUrlIds();
+    if (taskId === null && caseId === null) return;
+
+    setRestoring(true);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        if (caseId !== null) {
+          const restored = await getCase(caseId, controller.signal);
+          if (controller.signal.aborted) return;
+          setCaseDetail(restored);
+          try {
+            setTask(await getTask(restored.task_id, controller.signal));
+          } catch {
+            // The board renders from the case alone; the task is a nicety.
+          }
+          if (controller.signal.aborted) return;
+          say(
+            "assistant",
+            `幫你叫出案件 ${restored.case_number}（${restored.status_label}）。` +
+              `${restored.next_action ?? ""}`,
+          );
+          return;
+        }
+
+        const restored = await getTask(taskId as number, controller.signal);
+        if (controller.signal.aborted) return;
+        setTask(restored);
+        const title = restored.parsed_data.title ?? `任務 #${restored.id}`;
+        say(
+          "assistant",
+          restored.missing_fields.length > 0
+            ? `幫你叫出「${title}」，還缺少 ` +
+                `${restored.missing_fields.map((f) => f.label).join("、")}，` +
+                "補齊後按「確認並尋找廠商」。"
+            : `幫你叫出「${title}」，資料已完整，可以直接按「確認並尋找廠商」。`,
+        );
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError(describeError(err, "讀取先前的需求失敗"));
+      } finally {
+        if (!controller.signal.aborted) setRestoring(false);
+      }
+    })();
+
+    return () => controller.abort();
+    // Runs once on mount: the URL is read imperatively, not tracked as state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submit = useCallback(
@@ -87,6 +180,7 @@ export default function DemandWorkspace() {
       try {
         const result = await analyzeDemand(prompt, controller.signal);
         setTask(result);
+        syncUrl({ task: result.id, case: null });
 
         const missing = result.missing_fields;
         const title = result.parsed_data.title ?? "任務";
@@ -222,6 +316,7 @@ export default function DemandWorkspace() {
           controller.signal,
         );
         setCaseDetail(created);
+        syncUrl({ task: created.task_id, case: created.id });
         say(
           "assistant",
           `案件 ${created.case_number} 已建立，狀態是「${created.status_label}」。` +
@@ -235,6 +330,7 @@ export default function DemandWorkspace() {
           try {
             const existing = await getCase(err.detail.case_id, controller.signal);
             setCaseDetail(existing);
+            syncUrl({ task: existing.task_id, case: existing.id });
             say(
               "assistant",
               `這個需求已經建立過案件 ${existing.case_number}` +
@@ -344,13 +440,13 @@ export default function DemandWorkspace() {
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-2">
       <ChatPanel
         messages={messages}
-        loading={analyzing || matching || creatingCaseFor !== null}
+        loading={analyzing || matching || creatingCaseFor !== null || restoring}
         error={error}
         onSubmit={(prompt) => void submit(prompt)}
       />
       <TaskResultPanel
         task={task}
-        loading={analyzing}
+        loading={analyzing || restoring}
         matching={matching}
         matchResult={matchResult}
         caseDetail={caseDetail}
@@ -358,7 +454,10 @@ export default function DemandWorkspace() {
         onConfirm={(filled) => void confirmAndMatch(filled)}
         onBackToTask={() => setMatchResult(null)}
         onSelectVendor={(vendor) => void selectVendor(vendor)}
-        onBackToVendors={() => setCaseDetail(null)}
+        onBackToVendors={() => {
+          setCaseDetail(null);
+          syncUrl({ task: task?.id ?? null, case: null });
+        }}
         onRefreshCase={() => void refreshCase()}
         onConfirmContact={() => void confirmContact()}
         onCompleteCase={() => void markComplete()}

@@ -41,6 +41,8 @@ export type ParsedDemand = {
   category_code?: string | null;
   category_name?: string | null;
   service_type?: string | null;
+  /** Chinese counterpart of service_type, e.g. 馬桶阻塞疏通. */
+  service_label?: string | null;
   budget?: {
     amount?: number | null;
     currency?: string | null;
@@ -157,6 +159,51 @@ export type MatchVendorsResponse = {
   fallback_reason?: string | null;
 };
 
+export async function getTask(
+  taskId: number,
+  signal?: AbortSignal,
+): Promise<LifeTask> {
+  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as LifeTask;
+}
+
+/** One condition of a request, with whatever is on file for it right now. */
+export type EditableField = {
+  field: string;
+  label: string;
+  input_type: InputType;
+  placeholder?: string | null;
+  unit?: string | null;
+  reason?: string | null;
+  value?: string | null;
+  missing: boolean;
+};
+
+export type TaskFieldsResponse = {
+  task_id: number;
+  status: string;
+  editable: boolean;
+  locked_reason?: string | null;
+  fields: EditableField[];
+};
+
+/** Everything the resident is allowed to change about a request. */
+export async function fetchTaskFields(
+  taskId: number,
+  signal?: AbortSignal,
+): Promise<TaskFieldsResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/fields`, {
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw new ApiError(await readErrorMessage(res), res.status);
+  return (await res.json()) as TaskFieldsResponse;
+}
+
 /** Write filled-in fields back to a task and optionally move its status. */
 export async function updateTask(
   taskId: number,
@@ -214,6 +261,8 @@ export type SharedWithVendor = {
   title?: string | null;
   summary?: string | null;
   category_name?: string | null;
+  /** Finer than category_name: 馬桶阻塞疏通 rather than 水電維修. */
+  service_label?: string | null;
   city?: string | null;
   district?: string | null;
   budget_amount?: number | null;

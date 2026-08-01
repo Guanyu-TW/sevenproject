@@ -131,6 +131,9 @@ class BedrockDemandPayload(BaseModel):
 
     intent: str = Field(default="service_request")
     service_type: str | None = Field(default=None, alias="serviceType")
+    #: Human-readable counterpart to ``service_type``. The code is useful for
+    #: grouping, but a vendor should never be shown ``toilet_clog_repair``.
+    service_label: str | None = Field(default=None, alias="serviceLabel")
     category_code: str | None = Field(default=None, alias="categoryCode")
     title: str
     summary: str | None = None

@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="0.1.0",
-    description="AI 生活管家：智慧社區生活需求理解與服務媒合平台",
+    description="AI 智慧管家：智慧社區生活需求理解與服務媒合平台",
     docs_url="/docs",
     openapi_url="/openapi.json",
 )

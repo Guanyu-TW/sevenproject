@@ -148,7 +148,7 @@ export default function MissingFieldsForm({ task, submitting, onConfirm }: Props
               還有 {remaining.length} 項未填：
               {remaining.map((f) => f.label).join("、")}
               <span className="mt-0.5 block text-slate-500">
-                沒填完也可以直接送出，AI 會依現有資料媒合
+                沒填完也可以直接送出，管家會依現有資料媒合
               </span>
             </span>
           ) : (

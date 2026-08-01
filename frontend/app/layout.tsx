@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI 生活管家 MVP",
+  title: "AI 智慧管家",
   description: "智慧社區生活需求理解與服務媒合平台",
 };
 

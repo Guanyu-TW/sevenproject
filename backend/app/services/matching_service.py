@@ -45,6 +45,7 @@ def build_demand_context(task: LifeTask) -> DemandContext:
         summary=parsed.get("summary"),
         category_name=task.category.name if task.category else None,
         service_type=parsed.get("service_type"),
+        service_label=parsed.get("service_label"),
         budget_amount=_as_float(budget.get("amount")),
         currency=budget.get("currency") or "TWD",
         city=location.get("city"),

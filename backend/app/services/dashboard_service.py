@@ -96,6 +96,16 @@ def _build_tags(task: LifeTask) -> list[str]:
     if task.category is not None:
         tags.append(task.category.name)
 
+    # The finer service item, right after the category, so a list of plumbing
+    # jobs is scannable instead of six identical 水電維修 chips. Skipped when it
+    # just repeats the card's own heading.
+    service_label = parsed.get("service_label")
+    title = parsed.get("title")
+    if isinstance(service_label, str):
+        service_label = service_label.strip()
+        if service_label and service_label not in tags and service_label != title:
+            tags.append(service_label)
+
     urgency = parsed.get("urgency")
     if isinstance(urgency, str) and urgency in URGENCY_TAGS:
         # "一般" adds nothing to a card, so only surface the notable ones.

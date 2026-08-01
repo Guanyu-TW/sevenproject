@@ -1,8 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import TaskConditionsForm from "@/components/TaskConditionsForm";
 import {
   ApiError,
+  completeCase,
+  confirmCase,
   fetchDashboard,
   type BadgeTone,
   type DashboardResponse,
@@ -34,6 +38,10 @@ export default function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  /** Which card has its edit form open. */
+  const [editing, setEditing] = useState<number | null>(null);
+  /** Which case has a confirm / complete request in flight. */
+  const [busyCase, setBusyCase] = useState<number | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -64,6 +72,34 @@ export default function DashboardView() {
       ? tasks
       : tasks.filter((t) => t.badge_tone === filter);
   }, [data, filter]);
+
+  /**
+   * Confirm the quote or close the case straight from the dashboard.
+   *
+   * These used to live only on the consumer workspace's tracking board, which
+   * was unreachable once you navigated away -- so a case that reached
+   * vendor_accepted could never be confirmed and both sides stayed locked.
+   */
+  const act = useCallback(
+    async (caseId: number, action: "confirm" | "complete") => {
+      setBusyCase(caseId);
+      setError(null);
+      try {
+        if (action === "confirm") await confirmCase(caseId);
+        else await completeCase(caseId, "consumer");
+        await load();
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? `${action === "confirm" ? "確認" : "標記完成"}失敗（${err.status}）：${err.message}`
+            : "無法連線至後端 API",
+        );
+      } finally {
+        setBusyCase(null);
+      }
+    },
+    [load],
+  );
 
   const stats = data?.stats;
 
@@ -181,7 +217,25 @@ export default function DashboardView() {
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {visible.map((task) => (
                 <li key={task.task_id}>
-                  <TaskCard task={task} />
+                  <TaskCard
+                    task={task}
+                    editing={editing === task.task_id}
+                    onToggleEdit={() =>
+                      setEditing((prev) =>
+                        prev === task.task_id ? null : task.task_id,
+                      )
+                    }
+                    onSaved={() => {
+                      setEditing(null);
+                      void load();
+                    }}
+                    busy={
+                      task.latest_case != null &&
+                      busyCase === task.latest_case.case_id
+                    }
+                    disabled={busyCase !== null}
+                    onAct={act}
+                  />
                 </li>
               ))}
             </ul>
@@ -236,16 +290,47 @@ function EmptyState({ hasAny }: { hasAny: boolean }) {
       <p className="mt-1 text-sm text-slate-500">
         {hasAny
           ? "換一個狀態看看，或選「全部」。"
-          : "到「消費者端」用一句話描述需求，AI 會幫你整理成任務。"}
+          : "到「消費者端」用一句話描述需求，智慧管家會幫你整理成任務。"}
       </p>
     </div>
   );
 }
 
-function TaskCard({ task }: { task: DashboardTaskItem }) {
+function TaskCard({
+  task,
+  editing,
+  onToggleEdit,
+  onSaved,
+  busy,
+  disabled,
+  onAct,
+}: {
+  task: DashboardTaskItem;
+  editing: boolean;
+  onToggleEdit: () => void;
+  onSaved: () => void;
+  busy: boolean;
+  disabled: boolean;
+  onAct: (caseId: number, action: "confirm" | "complete") => void;
+}) {
   const tone = TONES[task.badge_tone] ?? TONES.draft;
   const heading = task.title || task.raw_input || `任務 #${task.task_id}`;
   const location = [task.city, task.district].filter(Boolean).join(" ");
+  const caseRef = task.latest_case;
+  const caseStatus = caseRef?.status;
+  // A request is only editable while nobody else is acting on it. The server
+  // enforces this too; this just avoids offering a button that would 409.
+  const canEdit =
+    caseStatus === undefined ||
+    caseStatus === "vendor_rejected" ||
+    caseStatus === "cancelled"
+      ? task.status !== "completed" && task.status !== "cancelled"
+      : false;
+  // Deep link back into the workspace: ?case= reopens the tracking board,
+  // ?task= reopens the form / vendor list.
+  const resumeHref = caseRef
+    ? `/?case=${caseRef.case_id}`
+    : `/?task=${task.task_id}`;
 
   return (
     <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300">
@@ -327,11 +412,60 @@ function TaskCard({ task }: { task: DashboardTaskItem }) {
       ) : task.missing_count > 0 ? (
         <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
           <span className="font-semibold">下一步：</span>
-          還缺 {task.missing_count} 項資料，回到消費者端補齊後即可媒合。
+          還缺 {task.missing_count} 項資料，可以在這裡直接補，或回到消費者端繼續。
         </p>
       ) : null}
 
       <div className="mt-auto" />
+
+      {editing ? (
+        <TaskConditionsForm
+          taskId={task.task_id}
+          onSaved={onSaved}
+          onCancel={onToggleEdit}
+        />
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+          {caseRef && caseStatus === "vendor_accepted" ? (
+            <button
+              type="button"
+              onClick={() => onAct(caseRef.case_id, "confirm")}
+              disabled={disabled}
+              className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {busy ? "處理中…" : "確認並提供聯絡資訊"}
+            </button>
+          ) : null}
+
+          {caseRef && caseStatus === "contact_shared" ? (
+            <button
+              type="button"
+              onClick={() => onAct(caseRef.case_id, "complete")}
+              disabled={disabled}
+              className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {busy ? "處理中…" : "標記服務完成"}
+            </button>
+          ) : null}
+
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={onToggleEdit}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            >
+              修改需求
+            </button>
+          ) : null}
+
+          <Link
+            href={resumeHref}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+          >
+            {caseRef ? "查看進度" : "繼續處理"}
+          </Link>
+        </div>
+      )}
     </article>
   );
 }

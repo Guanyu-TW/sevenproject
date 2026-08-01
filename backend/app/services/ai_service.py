@@ -144,6 +144,7 @@ class MockAIProvider(AIProvider):
             parsed_data={
                 "intent": "service_request",
                 "service_type": "faucet_leak_repair",
+                "service_label": "水龍頭漏水維修",
                 "budget": {
                     "amount": 2000,
                     "currency": "TWD",
@@ -212,7 +213,7 @@ DEMAND_TOOL_NAME = "record_life_demand"
 RANK_TOOL_NAME = "rank_vendors"
 
 _SYSTEM_PROMPT_TEMPLATE = """\
-你是「AI 生活管家」，服務台灣智慧社區的住戶。你的工作是把住戶用口語說出的生活需求，
+你是「AI 智慧管家」，服務台灣智慧社區的住戶。你的工作是把住戶用口語說出的生活需求，
 整理成結構化資料，交給後續的廠商媒合系統。
 
 規則：
@@ -226,6 +227,9 @@ _SYSTEM_PROMPT_TEMPLATE = """\
    只列出「這次服務真正需要、但住戶還沒提供」的欄位，不要把全部欄位都列上。
 5. `budget.amount` 只填數字（例如「兩千」要轉成 2000），幣別預設 TWD。
 6. `title` 用不超過 20 個字的繁體中文短句描述問題本身。
+6-1. `serviceLabel` 用 4 到 10 個字的繁體中文寫出「服務細項」，要比 `categoryCode`
+     更具體，例如分類是水電維修時可寫「馬桶阻塞疏通」、「熱水器維修」、「插座配線檢修」。
+     這是廠商用來判斷自己能不能接的關鍵欄位，不要只重複分類名稱。
 7. `urgency` 只能是 "low"、"normal"、"high"、"emergency" 之一。
 8. `intent` 只能是 "service_request"（要找服務）、"question"（只是詢問）、
    "other"（其他）之一。
@@ -257,6 +261,13 @@ def _build_tool_spec() -> dict[str, Any]:
                     "serviceType": {
                         "type": "string",
                         "description": "更細的服務項目代號，英文小寫加底線，例如 faucet_leak_repair。",
+                    },
+                    "serviceLabel": {
+                        "type": "string",
+                        "description": (
+                            "serviceType 的繁體中文說法，4 到 10 個字，會直接顯示給廠商，"
+                            "例如「馬桶阻塞疏通」。必須比服務分類更具體。"
+                        ),
                     },
                     "categoryCode": {
                         "type": ["string", "null"],
@@ -365,7 +376,7 @@ def build_system_prompt(categories: Sequence[CategoryHint]) -> str:
 
 
 _RANK_SYSTEM_PROMPT = """\
-你是「AI 生活管家」的媒合顧問。系統已經用硬性條件（服務類型、地區）篩選出候選廠商，
+你是「AI 智慧管家」的媒合顧問。系統已經用硬性條件（服務類型、地區）篩選出候選廠商，
 你的工作是替住戶挑出最適合的幾家，並寫出住戶看得懂的推薦理由。
 
 規則：
@@ -437,7 +448,9 @@ def _format_demand(demand: DemandContext) -> str:
         line("需求標題", demand.title),
         line("需求說明", demand.summary),
         line("服務分類", demand.category_name),
-        line("細項", demand.service_type),
+        # Prefer the Chinese label; the snake_case code is only a fallback for
+        # rows analysed before serviceLabel existed.
+        line("服務細項", demand.service_label or demand.service_type),
         line(
             "預算",
             f"{int(demand.budget_amount)} {demand.currency or 'TWD'}"
@@ -703,6 +716,7 @@ class RealAIProvider(AIProvider):
             parsed_data={
                 "intent": payload.intent,
                 "service_type": payload.service_type,
+                "service_label": payload.service_label,
                 "budget": payload.budget.model_dump(),
                 "location": payload.location.model_dump(),
                 "urgency": payload.urgency,

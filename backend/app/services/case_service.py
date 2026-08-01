@@ -308,6 +308,10 @@ def _build_shared_view(case: ConsultationCase) -> SharedWithVendor:
         title=title,
         summary=summary,
         category_name=case.task.category.name if case.task.category else None,
+        # Safe to share before confirmation: it describes the job, not the
+        # resident. Falls back to the snake_case code for rows analysed before
+        # serviceLabel existed.
+        service_label=parsed.get("service_label") or parsed.get("service_type"),
         city=city,
         district=district,
         area=area,

@@ -223,6 +223,61 @@ def _coerce(value: Any, cast: str) -> Any:
     return str(value)
 
 
+def read_value(parsed_data: dict[str, Any], path: tuple[str, ...]) -> Any:
+    """Value stored at ``path``, or None if any hop is missing."""
+    cursor: Any = parsed_data
+    for key in path:
+        if not isinstance(cursor, dict):
+            return None
+        cursor = cursor.get(key)
+    return cursor
+
+
+def _as_input_text(value: Any) -> str | None:
+    """Render a stored value for an HTML input, or None if it cannot be."""
+    if value is None or isinstance(value, (dict, list)):
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    text = str(value).strip()
+    return text or None
+
+
+def editable_fields(
+    parsed_data: dict[str, Any] | None,
+    missing_fields: list[Any] | None,
+) -> list[tuple[str, FieldSpec, str | None, bool]]:
+    """The conditions of one request: what was asked for, plus what was answered.
+
+    Returns ``(key, spec, current_value, still_missing)`` in catalogue order so
+    the form does not reshuffle between loads.
+
+    Deliberately not the whole catalogue: a plumbing job has no use for 坪數 or
+    人數, and 13 inputs for a 4-field request is noise. File inputs are skipped
+    because a browser cannot prefill one, so it could only ever look empty and
+    silently wipe nothing.
+    """
+    parsed = parsed_data or {}
+
+    outstanding: set[str] = set()
+    for item in missing_fields or []:
+        key = item.get("field") if isinstance(item, dict) else getattr(item, "field", None)
+        if isinstance(key, str) and key.strip():
+            outstanding.add(_slugify(key))
+
+    result: list[tuple[str, FieldSpec, str | None, bool]] = []
+    for key, spec in FIELD_CATALOG.items():
+        if spec.input_type == "file":
+            continue
+        current = _as_input_text(read_value(parsed, spec.path or (key,)))
+        if key not in outstanding and current is None:
+            continue
+        result.append((key, spec, current, key in outstanding))
+    return result
+
+
 def _assign(target: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
     """Write ``value`` into ``target`` at ``path``, creating dicts as needed."""
     cursor = target
@@ -293,5 +348,7 @@ __all__ = [
     "FieldSpec",
     "apply_filled_fields",
     "catalog_field",
+    "editable_fields",
     "normalize_missing_fields",
+    "read_value",
 ]

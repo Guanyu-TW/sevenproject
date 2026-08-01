@@ -3,9 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "@/components/DemandWorkspace";
 
+// Spread across categories on purpose. With only plumbing samples every demo
+// task came back looking identical, which made the vendor portal look like it
+// only understood one kind of job.
 const SAMPLE_PROMPTS = [
   "嘉義市水龍頭漏水，預算兩千",
+  "嘉義市西區冷氣不冷還會滴水，想找人來洗",
+  "嘉義市東區廚房發現白蟻，想請人來消毒",
   "下週六想找人來大掃除，三房兩廳",
+  "嘉義市西區想找人陪我媽去醫院復健，每週兩次",
   "想訂 10 人份的便當送到社區活動中心",
 ];
 
@@ -48,7 +54,7 @@ export default function ChatPanel({
     >
       <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
         <h2 id="chat-heading" className="text-base font-semibold text-slate-900">
-          AI 對話
+          與智慧管家對話
         </h2>
         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
           說出你的生活需求
@@ -112,7 +118,7 @@ export default function ChatPanel({
             {loading ? (
               <>
                 <Spinner />
-                解析中…
+                處理中…
               </>
             ) : (
               "送出需求"
@@ -134,7 +140,7 @@ function EmptyState({
   return (
     <div className="space-y-4 py-6">
       <p className="text-sm text-slate-600">
-        用一句話描述你需要的服務，AI 會幫你整理成可派工的任務。
+        用一句話描述你需要的服務，智慧管家會幫你整理成可派工的任務。
       </p>
       <div className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -167,7 +173,7 @@ function Bubble({ message }: { message: ChatMessage }) {
             : "rounded-bl-md bg-slate-100 text-slate-800"
         }`}
       >
-        <span className="sr-only">{isUser ? "你說：" : "AI 回覆："}</span>
+        <span className="sr-only">{isUser ? "你說：" : "智慧管家回覆："}</span>
         {message.text}
       </div>
     </div>
@@ -179,7 +185,7 @@ function TypingBubble() {
     <div className="flex justify-start">
       <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-slate-100 px-4 py-3 text-sm text-slate-600">
         <Spinner />
-        AI 正在解析你的需求…
+        智慧管家正在處理您的需求…
       </div>
     </div>
   );

@@ -318,11 +318,12 @@ function PendingCaseCard({
   return (
     <article className="rounded-xl border border-amber-300 bg-white p-4 shadow-sm">
       <header className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="font-mono text-xs text-slate-500">{caseItem.case_number}</p>
           <h3 className="mt-0.5 font-semibold text-slate-900">
             {d.title ?? "（無標題）"}
           </h3>
+          <ServiceTags demand={d} />
         </div>
         <div className="text-right">
           <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
@@ -339,7 +340,6 @@ function PendingCaseCard({
       ) : null}
 
       <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-600">
-        <Fact label="服務類型" value={d.category_name} />
         <Fact
           label="地區"
           value={[d.city, d.district].filter(Boolean).join(" ") || null}
@@ -473,11 +473,12 @@ function ActiveCaseCard({
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="font-mono text-xs text-slate-500">{caseItem.case_number}</p>
           <h3 className="mt-0.5 text-sm font-semibold text-slate-900">
             {d.title ?? "（無標題）"}
           </h3>
+          <ServiceTags demand={d} />
         </div>
         <div className="text-right">
           <span
@@ -550,6 +551,35 @@ function ActiveCaseCard({
         </button>
       ) : null}
     </article>
+  );
+}
+
+/**
+ * Category plus the finer service item. The category alone made every plumbing
+ * job read as 水電維修, so a vendor could not tell a blocked toilet from a dead
+ * socket without opening the summary.
+ */
+function ServiceTags({ demand }: { demand: VendorCaseListItem["demand"] }) {
+  // When the request is narrow enough the model's title and label converge
+  // ("水龍頭漏水維修" twice). Showing it once reads better.
+  const label =
+    demand.service_label && demand.service_label !== demand.title
+      ? demand.service_label
+      : null;
+  if (!demand.category_name && !label) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      {demand.category_name ? (
+        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+          {demand.category_name}
+        </span>
+      ) : null}
+      {label ? (
+        <span className="rounded-md bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
+          {label}
+        </span>
+      ) : null}
+    </div>
   );
 }
 

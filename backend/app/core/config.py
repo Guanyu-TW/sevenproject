@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    PROJECT_NAME: str = "AI Life Guardian"
+    PROJECT_NAME: str = "AI 智慧管家"
     ENVIRONMENT: str = "development"
     API_PREFIX: str = "/api"
 

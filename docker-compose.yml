@@ -28,7 +28,7 @@ services:
     container_name: alg_backend
     restart: unless-stopped
     environment:
-      PROJECT_NAME: AI Life Guardian
+      PROJECT_NAME: AI 智慧管家
       ENVIRONMENT: development
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-alg_user}:${POSTGRES_PASSWORD:-alg_password}@db:5432/${POSTGRES_DB:-alg_db}
       BACKEND_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000

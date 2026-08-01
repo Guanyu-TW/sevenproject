@@ -58,6 +58,9 @@ class SharedWithVendor(BaseModel):
     title: str | None = None
     summary: str | None = None
     category_name: str | None = None
+    #: Finer-grained than ``category_name``, e.g. 馬桶阻塞疏通 rather than 水電維修.
+    #: This is what lets a vendor tell two plumbing jobs apart at a glance.
+    service_label: str | None = None
     city: str | None = None
     district: str | None = None
     budget_amount: float | None = None

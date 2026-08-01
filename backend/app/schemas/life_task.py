@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import TaskStatus
-from app.schemas.ai import MissingField
+from app.schemas.ai import InputType, MissingField
 from app.schemas.service_category import ServiceCategoryRead
 
 
@@ -24,6 +24,38 @@ class LifeTaskRead(BaseModel):
     next_action: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class EditableField(BaseModel):
+    """One condition of a request, with whatever value is on file right now.
+
+    Same vocabulary as ``MissingField`` so the frontend can render both with one
+    component; ``value`` and ``missing`` are the only additions.
+    """
+
+    field: str
+    label: str
+    input_type: InputType = "text"
+    placeholder: str | None = None
+    unit: str | None = None
+    reason: str | None = None
+    #: Current value rendered for an HTML input, None when nothing is stored.
+    value: str | None = None
+    #: True when the AI is still asking for this one.
+    missing: bool = False
+
+
+class TaskFieldsResponse(BaseModel):
+    """Body of GET /api/tasks/{id}/fields."""
+
+    task_id: int
+    status: TaskStatus
+    #: False once a vendor is working the request, so the UI can hide the form
+    #: instead of offering an edit the API would reject.
+    editable: bool
+    #: Why editing is closed, when it is.
+    locked_reason: str | None = None
+    fields: list[EditableField]
 
 
 class LifeTaskUpdate(BaseModel):

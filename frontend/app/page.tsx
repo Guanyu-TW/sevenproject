@@ -1,29 +1,20 @@
-import AppNav from "@/components/AppNav";
+import BrandBackdrop, { BrandStrip } from "@/components/BrandBackdrop";
 import DemandWorkspace from "@/components/DemandWorkspace";
-import HealthBadge from "@/components/HealthBadge";
+import PageHeader from "@/components/PageHeader";
 
 export default function Home() {
   return (
-    <main className="mx-auto flex h-screen max-w-7xl flex-col gap-5 px-6 py-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-widest text-sky-600">
-            Step 6 · 廠商接案連動
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            AI 生活管家 MVP
-          </h1>
-          <p className="text-sm text-slate-600">
-            智慧社區生活需求理解與服務媒合平台
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <AppNav />
-          <HealthBadge />
-        </div>
-      </header>
+    <>
+      <BrandBackdrop />
+      <main className="mx-auto flex h-screen max-w-7xl flex-col gap-5 px-6 py-6">
+        <PageHeader
+          title="說一句話，其他交給管家"
+          subtitle="描述你的生活需求，管家會整理成任務、找到合適的廠商並全程追蹤"
+          eyebrowSlot={<BrandStrip />}
+        />
 
-      <DemandWorkspace />
-    </main>
+        <DemandWorkspace />
+      </main>
+    </>
   );
 }

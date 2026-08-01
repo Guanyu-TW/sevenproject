@@ -122,13 +122,48 @@ export default function TaskResultPanel({
   );
 }
 
+const FLOW_STEPS = [
+  { title: "說出需求", body: "一句白話就好，不用填一堆欄位。" },
+  { title: "補齊資料", body: "管家只問這次派工真正缺的幾項。" },
+  { title: "挑選廠商", body: "看 AI 推薦原因，選一家建立案件。" },
+  { title: "確認並追蹤", body: "確認報價後才交換聯絡資訊，全程可查。" },
+];
+
 function Placeholder() {
   return (
-    <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 text-center">
-      <p className="text-sm font-medium text-slate-700">還沒有解析結果</p>
-      <p className="max-w-xs text-sm text-slate-500">
-        在左邊送出一句需求，AI 擷取到的服務類型、預算與缺少的資料會顯示在這裡。
-      </p>
+    <div className="flex h-full min-h-48 flex-col items-center justify-center gap-5 px-2 text-center">
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium text-slate-700">還沒有解析結果</p>
+        <p className="mx-auto max-w-xs text-sm text-slate-500">
+          在左邊送出一句需求，管家擷取到的服務類型、預算與缺少的資料會顯示在這裡。
+        </p>
+      </div>
+
+      {/* The panel is tall and was otherwise blank; showing the four steps makes
+          the wait feel intentional and tells a first-time visitor what to expect. */}
+      <ol className="w-full max-w-sm space-y-2 text-left">
+        {FLOW_STEPS.map((step, i) => (
+          <li
+            key={step.title}
+            className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5"
+          >
+            <span
+              aria-hidden="true"
+              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500"
+            >
+              {i + 1}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-slate-800">
+                {step.title}
+              </span>
+              <span className="block text-xs leading-relaxed text-slate-500">
+                {step.body}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -195,7 +230,12 @@ function TaskCard({
 
       <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2">
         <Field label="服務類型" value={task.category?.name ?? null} hint={task.category?.code} />
-        <Field label="細項" value={p.service_type ?? null} />
+        {/* Chinese label first; service_type is a snake_case code and was
+            being shown to the resident verbatim. */}
+        <Field
+          label="服務細項"
+          value={p.service_label ?? p.service_type ?? null}
+        />
         <Field
           label="預算"
           value={
