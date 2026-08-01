@@ -4,10 +4,12 @@ from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base, TimestampMixin
+from app.models.associations import vendor_service_categories
 
 if TYPE_CHECKING:
     from app.models.life_task import LifeTask
     from app.models.service_form import ServiceForm
+    from app.models.vendor import Vendor
 
 
 class ServiceCategory(TimestampMixin, Base):
@@ -24,6 +26,10 @@ class ServiceCategory(TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
     life_tasks: Mapped[list["LifeTask"]] = relationship(back_populates="category")
+    vendors: Mapped[list["Vendor"]] = relationship(
+        secondary=vendor_service_categories,
+        back_populates="categories",
+    )
 
     def __repr__(self) -> str:
         return f"<ServiceCategory id={self.id} code={self.code!r}>"

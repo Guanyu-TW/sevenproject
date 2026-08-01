@@ -7,7 +7,7 @@ export default function Home() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-widest text-sky-600">
-            Step 2 · Demand Understanding
+            Step 4 · 狀態流轉 + AI 廠商媒合
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             AI 生活管家 MVP

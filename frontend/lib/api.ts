@@ -7,11 +7,25 @@ export type HealthResponse = {
   detail?: string;
 };
 
+/** Matches the InputType literal on the backend. */
+export type InputType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "tel"
+  | "date"
+  | "datetime-local"
+  | "file";
+
 export type MissingField = {
   field: string;
   label: string;
   reason?: string | null;
   required: boolean;
+  /** Which control to render. Older rows default to "text" server-side. */
+  input_type: InputType;
+  placeholder?: string | null;
+  unit?: string | null;
 };
 
 export type ServiceCategory = {
@@ -44,6 +58,7 @@ export type ParsedDemand = {
   keywords?: string[] | null;
   _meta?: {
     provider?: string | null;
+    model?: string | null;
     confidence?: number | null;
     analyzed_at?: string | null;
   } | null;
@@ -113,4 +128,68 @@ export async function analyzeDemand(
     throw new ApiError(await readErrorMessage(res), res.status);
   }
   return (await res.json()) as LifeTask;
+}
+
+export type VendorRecommendation = {
+  vendor_id: number;
+  name: string;
+  rating: number;
+  description?: string | null;
+  service_city?: string | null;
+  service_districts: string[];
+  price_min?: number | null;
+  price_max?: number | null;
+  categories: string[];
+  estimated_price?: number | null;
+  match_score: number;
+  recommendation_reason: string;
+};
+
+export type MatchVendorsResponse = {
+  task_id: number;
+  status: string;
+  category_code?: string | null;
+  candidate_count: number;
+  recommendations: VendorRecommendation[];
+  provider: string;
+  model?: string | null;
+  fallback_used: boolean;
+  fallback_reason?: string | null;
+};
+
+/** Write filled-in fields back to a task and optionally move its status. */
+export async function updateTask(
+  taskId: number,
+  body: { filled_fields?: Record<string, unknown>; status?: string },
+  signal?: AbortSignal,
+): Promise<LifeTask> {
+  const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res), res.status);
+  }
+  return (await res.json()) as LifeTask;
+}
+
+export async function matchVendors(
+  taskId: number,
+  limit = 3,
+  signal?: AbortSignal,
+): Promise<MatchVendorsResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/matching/vendors`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id: taskId, limit }),
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res), res.status);
+  }
+  return (await res.json()) as MatchVendorsResponse;
 }

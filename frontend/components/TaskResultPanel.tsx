@@ -1,31 +1,47 @@
 "use client";
 
-import type { LifeTask, MissingField } from "@/lib/api";
+import MissingFieldsForm from "@/components/MissingFieldsForm";
+import VendorRecommendations from "@/components/VendorRecommendations";
+import type { LifeTask, MatchVendorsResponse } from "@/lib/api";
 
 type Props = {
   task: LifeTask | null;
   loading: boolean;
+  /** Non-null once matching has returned; switches the panel to the vendor list. */
+  matchResult: MatchVendorsResponse | null;
+  matching: boolean;
+  onConfirm: (filled: Record<string, string>) => void;
+  onBackToTask: () => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "草稿",
   needs_info: "待補資料",
-  ready: "可派工",
+  ready_for_matching: "待媒合",
   matching: "媒合中",
   completed: "已完成",
   cancelled: "已取消",
 };
 
-export default function TaskResultPanel({ task, loading }: Props) {
+export default function TaskResultPanel({
+  task,
+  loading,
+  matchResult,
+  matching,
+  onConfirm,
+  onBackToTask,
+}: Props) {
+  const showVendors = matchResult !== null;
+
   return (
     <section
       aria-labelledby="task-heading"
-      aria-busy={loading}
+      aria-busy={loading || matching}
       className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm"
     >
       <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
         <h2 id="task-heading" className="text-base font-semibold text-slate-900">
-          任務解析結果
+          {showVendors ? "廠商推薦清單" : "任務解析結果"}
         </h2>
         {task ? (
           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
@@ -37,7 +53,19 @@ export default function TaskResultPanel({ task, loading }: Props) {
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {loading && !task ? <SkeletonCard /> : null}
         {!loading && !task ? <Placeholder /> : null}
-        {task ? <TaskCard task={task} dimmed={loading} /> : null}
+
+        {task && showVendors ? (
+          <VendorRecommendations result={matchResult} onBack={onBackToTask} />
+        ) : null}
+
+        {task && !showVendors ? (
+          <TaskCard
+            task={task}
+            dimmed={loading}
+            matching={matching}
+            onConfirm={onConfirm}
+          />
+        ) : null}
       </div>
     </section>
   );
@@ -65,7 +93,17 @@ function SkeletonCard() {
   );
 }
 
-function TaskCard({ task, dimmed }: { task: LifeTask; dimmed: boolean }) {
+function TaskCard({
+  task,
+  dimmed,
+  matching,
+  onConfirm,
+}: {
+  task: LifeTask;
+  dimmed: boolean;
+  matching: boolean;
+  onConfirm: (filled: Record<string, string>) => void;
+}) {
   const p = task.parsed_data;
   const budget = p.budget;
   const location = p.location;
@@ -85,12 +123,17 @@ function TaskCard({ task, dimmed }: { task: LifeTask; dimmed: boolean }) {
             {STATUS_LABELS[task.status] ?? task.status}
           </Pill>
           {p._meta?.provider ? (
-            <Pill tone="amber">{p._meta.provider} provider</Pill>
+            <Pill tone={p._meta.provider === "mock" ? "amber" : "emerald"}>
+              {p._meta.provider === "mock" ? "mock 假資料" : p._meta.provider}
+            </Pill>
           ) : null}
           {typeof confidence === "number" ? (
             <Pill tone="slate">信心 {Math.round(confidence * 100)}%</Pill>
           ) : null}
         </div>
+        {p._meta?.model ? (
+          <p className="text-xs text-slate-400">模型：{p._meta.model}</p>
+        ) : null}
         <h3 className="text-xl font-bold text-slate-900">
           {p.title ?? "（無標題）"}
         </h3>
@@ -116,7 +159,11 @@ function TaskCard({ task, dimmed }: { task: LifeTask; dimmed: boolean }) {
         <Field label="希望時間" value={p.preferred_time ?? null} />
       </dl>
 
-      <MissingFields fields={task.missing_fields} />
+      <MissingFieldsForm
+        task={task}
+        submitting={matching}
+        onConfirm={onConfirm}
+      />
 
       {task.raw_input ? (
         <div className="space-y-1">
@@ -137,45 +184,6 @@ function TaskCard({ task, dimmed }: { task: LifeTask; dimmed: boolean }) {
           {JSON.stringify(task, null, 2)}
         </pre>
       </details>
-    </div>
-  );
-}
-
-function MissingFields({ fields }: { fields: MissingField[] }) {
-  if (fields.length === 0) {
-    return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-        <p className="text-sm font-semibold text-emerald-900">資料已完整</p>
-        <p className="text-sm text-emerald-800">沒有缺少的欄位，可以進入媒合。</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
-      <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="text-amber-600">
-          ⚠
-        </span>
-        <p className="text-sm font-semibold text-amber-900">
-          缺少 {fields.length} 項資料
-        </p>
-      </div>
-      <ul className="mt-2 space-y-2">
-        {fields.map((f) => (
-          <li key={f.field} className="flex gap-2 text-sm">
-            <span className="mt-0.5 shrink-0 rounded bg-amber-200 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
-              {f.label}
-            </span>
-            <span className="text-amber-900">
-              {f.reason ?? "尚未提供"}
-              {f.required ? (
-                <span className="ml-1 text-xs text-amber-700">（必填）</span>
-              ) : null}
-            </span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -211,12 +219,13 @@ function Pill({
   tone,
 }: {
   children: React.ReactNode;
-  tone: "sky" | "slate" | "amber";
+  tone: "sky" | "slate" | "amber" | "emerald";
 }) {
   const tones = {
     sky: "bg-sky-100 text-sky-800",
     slate: "bg-slate-100 text-slate-700",
     amber: "bg-amber-100 text-amber-800",
+    emerald: "bg-emerald-100 text-emerald-800",
   } as const;
 
   return (

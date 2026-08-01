@@ -32,6 +32,22 @@ services:
       ENVIRONMENT: development
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-alg_user}:${POSTGRES_PASSWORD:-alg_password}@db:5432/${POSTGRES_DB:-alg_db}
       BACKEND_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+
+      # --- AI provider: "mock" (offline fixture) or "bedrock" (real LLM) ---
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      MOCK_AI_LATENCY_MS: ${MOCK_AI_LATENCY_MS:-600}
+
+      # --- AWS / Amazon Bedrock -------------------------------------------
+      # Values come from the .env file next to this compose file, or from the
+      # shell environment. Never hardcode credentials here.
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-us.anthropic.claude-haiku-4-5-20251001-v1:0}
+      BEDROCK_MAX_TOKENS: ${BEDROCK_MAX_TOKENS:-1500}
+      BEDROCK_TEMPERATURE: ${BEDROCK_TEMPERATURE:-0.0}
+      BEDROCK_READ_TIMEOUT_SECONDS: ${BEDROCK_READ_TIMEOUT_SECONDS:-45}
     ports:
       - "8000:8000"
     volumes:

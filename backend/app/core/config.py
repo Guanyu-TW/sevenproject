@@ -32,10 +32,27 @@ class Settings(BaseSettings):
     # without needing JSON syntax.
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    # Which AIProvider implementation to use. See app.services.ai_service.
+    # Which AIProvider implementation to use: "mock" or "bedrock".
+    # See app.services.ai_service.
     AI_PROVIDER: str = "mock"
     # Artificial delay for the mock provider so the UI loading state is visible.
     MOCK_AI_LATENCY_MS: int = 600
+
+    # --- AWS / Amazon Bedrock -------------------------------------------- #
+    # Credentials are resolved by boto3's normal chain (env vars, shared
+    # credentials file, SSO, IAM role). They are declared here only so the
+    # diagnostics script can report whether they are present -- their values
+    # are never logged or returned by the API.
+    AWS_DEFAULT_REGION: str = "us-east-1"
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_SESSION_TOKEN: str | None = None
+
+    BEDROCK_MODEL_ID: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    BEDROCK_MAX_TOKENS: int = 1500
+    BEDROCK_TEMPERATURE: float = 0.0
+    BEDROCK_READ_TIMEOUT_SECONDS: int = 45
+    BEDROCK_MAX_ATTEMPTS: int = 3
 
     # No auth yet: tasks created without an explicit user_id land on this
     # shared resident record, which is created on first use.
@@ -57,6 +74,11 @@ class Settings(BaseSettings):
             f"{quote_plus(self.POSTGRES_USER)}:{quote_plus(self.POSTGRES_PASSWORD)}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+    @property
+    def has_static_aws_credentials(self) -> bool:
+        """True when explicit keys are configured (never exposes the values)."""
+        return bool(self.AWS_ACCESS_KEY_ID and self.AWS_SECRET_ACCESS_KEY)
 
     @property
     def cors_origins(self) -> list[str]:
