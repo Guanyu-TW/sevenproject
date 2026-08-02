@@ -56,6 +56,36 @@ services:
       db:
         condition: service_healthy
 
+  # Standard MCP server wrapping the REST API, for external agents.
+  # Its own image on purpose: the MCP SDK needs a newer starlette than
+  # FastAPI 0.115 allows, so it cannot share the backend's interpreter.
+  mcp:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: alg_mcp
+    restart: unless-stopped
+    environment:
+      LIFE_GUARDIAN_API_BASE_URL: http://backend:8000
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8081"
+      # DNS-rebinding protection rejects anything not addressed to localhost
+      # with a 421, so every hostname this is reached by must be listed.
+      # Every Host header this server may legitimately receive. Add your own
+      # public hostname here before exposing it, or the SDK answers 421.
+      # localhost:8081 is the in-container address, used by health checks and
+      # by anything sharing this container's network namespace.
+      MCP_ALLOWED_HOSTS: localhost,localhost:8010,localhost:8081,127.0.0.1,127.0.0.1:8010,127.0.0.1:8081,mcp,mcp:8081
+      MCP_LOG_LEVEL: ${MCP_LOG_LEVEL:-INFO}
+    ports:
+      # Published on 8010, not 8081: on Windows with Hyper-V, 8034-8333 sits in
+      # a reserved excluded port range and binding 8081 fails outright. The
+      # container still listens on 8081 internally.
+      - "8010:8081"
+    depends_on:
+      - backend
+
   frontend:
     build:
       context: ./frontend

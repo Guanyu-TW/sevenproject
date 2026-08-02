@@ -1,6 +1,13 @@
 "use client";
 
+import { Inbox, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  EmptyState,
+  ErrorPanel,
+  SkeletonRows,
+  Spinner,
+} from "@/components/ui/Feedback";
 import {
   ApiError,
   completeCase,
@@ -168,20 +175,24 @@ export default function VendorPortal() {
             type="button"
             onClick={() => void refresh()}
             disabled={loading}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50"
           >
+            {loading ? (
+              <Spinner className="h-3 w-3" />
+            ) : (
+              <RefreshCw aria-hidden="true" className="h-3 w-3" />
+            )}
             {loading ? "更新中…" : "重新整理"}
           </button>
         </div>
       </section>
 
       {error ? (
-        <p
-          role="alert"
-          className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800"
-        >
-          {error}
-        </p>
+        <ErrorPanel
+          message={error}
+          onRetry={() => void refresh()}
+          retrying={loading}
+        />
       ) : null}
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
@@ -203,13 +214,39 @@ export default function VendorPortal() {
           {loading && !data ? (
             <SkeletonRows />
           ) : pendingCases.length === 0 ? (
-            <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
-              目前沒有待接單的案件。到消費者端送出一筆需求並選擇廠商，就會出現在這裡。
-            </p>
+            <EmptyState
+              icon={Inbox}
+              tone="emerald"
+              title="目前沒有待接單的案件"
+              body={
+                respondedCases.length + completedCases.length > 0
+                  ? "手上的案件都回覆過了。新的派單一進來就會出現在這裡，按「重新整理」也可以立刻檢查。"
+                  : "住戶送出需求並選擇你之後，案件就會出現在這裡。可以先到住戶端建立一筆需求試試。"
+              }
+              action={
+                <button
+                  type="button"
+                  onClick={() => void refresh()}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:bg-slate-300"
+                >
+                  {loading ? (
+                    <Spinner className="h-4 w-4" />
+                  ) : (
+                    <RefreshCw aria-hidden="true" className="h-4 w-4" />
+                  )}
+                  檢查有沒有新派單
+                </button>
+              }
+            />
           ) : (
             <ul className="space-y-3">
-              {pendingCases.map((c) => (
-                <li key={c.case_id}>
+              {pendingCases.map((c, i) => (
+                <li
+                  key={c.case_id}
+                  className="animate-rise"
+                  style={{ animationDelay: `${Math.min(i, 6) * 45}ms` }}
+                >
                   <PendingCaseCard
                     caseItem={c}
                     busy={activeCase === c.case_id}
@@ -277,16 +314,6 @@ export default function VendorPortal() {
           </section>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-function SkeletonRows() {
-  return (
-    <div className="animate-pulse space-y-3">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="h-28 rounded-xl bg-slate-200" />
-      ))}
     </div>
   );
 }

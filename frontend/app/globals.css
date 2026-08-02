@@ -18,6 +18,70 @@ body {
   background-repeat: no-repeat;
 }
 
+@layer utilities {
+  /* Entrance animations. Tailwind-only on purpose: Framer Motion would be a
+     second animation runtime for what is a handful of fades. */
+  .animate-fade-in {
+    animation: alg-fade-in 0.35s ease-out both;
+  }
+  .animate-rise {
+    animation: alg-rise 0.4s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+  }
+  .animate-pop {
+    animation: alg-pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  /* Listening indicator for the microphone. */
+  .animate-ripple {
+    animation: alg-ripple 1.5s ease-out infinite;
+  }
+}
+
+@keyframes alg-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes alg-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes alg-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes alg-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
 /* The app scrolls inside panels rather than the page, so the default chunky
    track sat right next to the card borders. */
 @supports (scrollbar-width: thin) {

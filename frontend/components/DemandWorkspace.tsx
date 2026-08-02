@@ -104,6 +104,12 @@ export default function DemandWorkspace() {
   // first client render `true`, which is a hydration mismatch.
   const [restoring, setRestoring] = useState(false);
   const inFlight = useRef<AbortController | null>(null);
+  /**
+   * How to re-run whatever just failed. Set at the start of each operation so
+   * the error panel can offer a retry that repeats the right step, instead of
+   * leaving the resident to guess which button to press again.
+   */
+  const retry = useRef<(() => void) | null>(null);
 
   const say = useCallback((role: ChatMessage["role"], text: string) => {
     setMessages((prev) => [...prev, { id: nextId(), role, text }]);
@@ -169,6 +175,7 @@ export default function DemandWorkspace() {
       inFlight.current?.abort();
       const controller = new AbortController();
       inFlight.current = controller;
+      retry.current = () => void submit(prompt);
 
       setError(null);
       setAnalyzing(true);
@@ -226,6 +233,7 @@ export default function DemandWorkspace() {
 
       const controller = new AbortController();
       inFlight.current = controller;
+      retry.current = () => void confirmAndMatch(filled);
 
       setError(null);
       setMatching(true);
@@ -299,6 +307,7 @@ export default function DemandWorkspace() {
 
       const controller = new AbortController();
       inFlight.current = controller;
+      retry.current = () => void selectVendor(vendor);
 
       setError(null);
       setCreatingCaseFor(vendor.vendor_id);
@@ -385,6 +394,7 @@ export default function DemandWorkspace() {
   /** Resident accepts the quote, handing their contact details to the vendor. */
   const confirmContact = useCallback(async () => {
     if (!caseDetail) return;
+    retry.current = () => void confirmContact();
     setBusyAction("confirm");
     setError(null);
     say("user", "我確認這位廠商的報價與時間，請提供我的聯絡資訊。");
@@ -406,6 +416,7 @@ export default function DemandWorkspace() {
 
   const markComplete = useCallback(async () => {
     if (!caseDetail) return;
+    retry.current = () => void markComplete();
     setBusyAction("complete");
     setError(null);
     say("user", "服務已經完成了。");
@@ -443,6 +454,14 @@ export default function DemandWorkspace() {
         loading={analyzing || matching || creatingCaseFor !== null || restoring}
         error={error}
         onSubmit={(prompt) => void submit(prompt)}
+        onRetry={
+          retry.current === null
+            ? undefined
+            : () => {
+                setError(null);
+                retry.current?.();
+              }
+        }
       />
       <TaskResultPanel
         task={task}

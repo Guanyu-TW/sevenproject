@@ -1,8 +1,20 @@
 "use client";
 
+import {
+  ClipboardList,
+  Filter as FilterIcon,
+  MessageSquarePlus,
+  RefreshCw,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TaskConditionsForm from "@/components/TaskConditionsForm";
+import {
+  EmptyState,
+  ErrorPanel,
+  SkeletonCards,
+  Spinner,
+} from "@/components/ui/Feedback";
 import {
   ApiError,
   completeCase,
@@ -119,8 +131,13 @@ export default function DashboardView() {
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-50"
           >
+            {loading ? (
+              <Spinner className="h-3 w-3" />
+            ) : (
+              <RefreshCw aria-hidden="true" className="h-3 w-3" />
+            )}
             {loading ? "更新中…" : "重新整理"}
           </button>
         </div>
@@ -166,9 +183,11 @@ export default function DashboardView() {
       </section>
 
       {error ? (
-        <p role="alert" className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          {error}
-        </p>
+        <ErrorPanel
+          message={error}
+          onRetry={() => void load()}
+          retrying={loading}
+        />
       ) : null}
 
       <section aria-labelledby="tasks-heading" className="flex min-h-0 flex-1 flex-col">
@@ -210,13 +229,48 @@ export default function DashboardView() {
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {loading && !data ? (
-            <SkeletonGrid />
+            <SkeletonCards />
           ) : visible.length === 0 ? (
-            <EmptyState hasAny={(data?.total ?? 0) > 0} />
+            (data?.total ?? 0) > 0 ? (
+              <EmptyState
+                icon={FilterIcon}
+                title="這個篩選條件下沒有任務"
+                body="換一個狀態看看，或選「全部」把所有生活事項列出來。"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setFilter("all")}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+                  >
+                    顯示全部
+                  </button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={ClipboardList}
+                tone="sky"
+                title="目前還沒有任務喔"
+                body="用一句話說出生活上的需求，管家會幫你整理成可派工的任務，並找到附近合適的廠商。"
+                action={
+                  <Link
+                    href="/user"
+                    className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                  >
+                    <MessageSquarePlus aria-hidden="true" className="h-4 w-4" />
+                    立刻去發佈需求
+                  </Link>
+                }
+              />
+            )
           ) : (
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {visible.map((task) => (
-                <li key={task.task_id}>
+              {visible.map((task, i) => (
+                <li
+                  key={task.task_id}
+                  className="animate-rise"
+                  style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
+                >
                   <TaskCard
                     task={task}
                     editing={editing === task.task_id}
@@ -271,31 +325,6 @@ function StatCard({
   );
 }
 
-function SkeletonGrid() {
-  return (
-    <ul className="grid animate-pulse grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {[0, 1, 2, 3, 4, 5].map((i) => (
-        <li key={i} className="h-44 rounded-xl bg-slate-200" />
-      ))}
-    </ul>
-  );
-}
-
-function EmptyState({ hasAny }: { hasAny: boolean }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
-      <p className="text-sm font-medium text-slate-700">
-        {hasAny ? "這個篩選條件下沒有任務" : "還沒有任何生活事項"}
-      </p>
-      <p className="mt-1 text-sm text-slate-500">
-        {hasAny
-          ? "換一個狀態看看，或選「全部」。"
-          : "到「消費者端」用一句話描述需求，智慧管家會幫你整理成任務。"}
-      </p>
-    </div>
-  );
-}
-
 function TaskCard({
   task,
   editing,
@@ -329,8 +358,8 @@ function TaskCard({
   // Deep link back into the workspace: ?case= reopens the tracking board,
   // ?task= reopens the form / vendor list.
   const resumeHref = caseRef
-    ? `/?case=${caseRef.case_id}`
-    : `/?task=${task.task_id}`;
+    ? `/user?case=${caseRef.case_id}`
+    : `/user?task=${task.task_id}`;
 
   return (
     <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-300">
