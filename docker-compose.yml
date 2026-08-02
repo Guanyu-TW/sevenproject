@@ -93,8 +93,10 @@ services:
     container_name: alg_frontend
     restart: unless-stopped
     environment:
-      # Browser-side fetch, so it must point at the host-exposed backend port.
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      # Browser-side fetch, so it must point where the browser can reach.
+      # Defaults to localhost for local compose; override via .env or shell
+      # when deploying (e.g., NEXT_PUBLIC_API_BASE_URL=https://api.yourdomain.com).
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
       WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
