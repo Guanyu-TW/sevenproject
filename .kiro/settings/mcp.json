@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "life-guardian": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--network",
+        "ai-life-guardian_default",
+        "-e",
+        "LIFE_GUARDIAN_API_BASE_URL=http://backend:8000",
+        "ai-life-guardian-mcp",
+        "--transport",
+        "stdio"
+      ],
+      "disabled": false
+    }
+  }
+}

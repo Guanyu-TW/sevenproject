@@ -15,7 +15,6 @@ import {
   UserRound,
   UtensilsCrossed,
   Wrench,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import BrandBackdrop, { BrandStrip } from "@/components/BrandBackdrop";
@@ -26,16 +25,19 @@ export const metadata = {
   title: "AI 智慧管家｜智慧社區生活服務平台",
 };
 
+// Mirrors the rows in service_categories, one for one. Anything finer (跳電處理,
+// 燈具安裝, 馬桶阻塞...) is a service_label the AI derives inside a category, not
+// a category of its own -- listing those here made the page claim 11 domains
+// while GET /api/service-categories returned 10.
 const CATEGORIES = [
   { icon: Wrench, label: "水電維修" },
-  { icon: Zap, label: "電力跳電" },
-  { icon: Snowflake, label: "冷氣空調" },
   { icon: Sparkles, label: "居家清潔" },
-  { icon: Hammer, label: "居家修繕" },
-  { icon: Package, label: "家電維修" },
-  { icon: Bug, label: "除蟲消毒" },
   { icon: UtensilsCrossed, label: "餐飲訂購" },
   { icon: ShoppingBasket, label: "代購採買" },
+  { icon: Package, label: "家電維修" },
+  { icon: Snowflake, label: "冷氣空調" },
+  { icon: Hammer, label: "居家修繕" },
+  { icon: Bug, label: "除蟲消毒" },
   { icon: Home, label: "搬家搬運" },
   { icon: UserRound, label: "長者照護" },
 ];
