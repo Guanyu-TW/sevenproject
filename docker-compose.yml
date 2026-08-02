@@ -31,7 +31,10 @@ services:
       PROJECT_NAME: AI 智慧管家
       ENVIRONMENT: development
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-alg_user}:${POSTGRES_PASSWORD:-alg_password}@db:5432/${POSTGRES_DB:-alg_db}
-      BACKEND_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # Browsers refuse to hand a response to JS unless the origin is listed
+      # here, even when the request itself returns 200. Override when deploying:
+      # BACKEND_CORS_ORIGINS=http://your-host:3000
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
 
       # --- AI provider: "mock" (offline fixture) or "bedrock" (real LLM) ---
       AI_PROVIDER: ${AI_PROVIDER:-mock}
